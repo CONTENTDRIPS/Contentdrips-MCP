@@ -1,0 +1,5 @@
+# Local Development Environment Variables
+# Copy this file to .dev.vars and update values
+
+LARAVEL_API_URL=http://localhost:8000
+RENDERER_API_URL=http://localhost:3000

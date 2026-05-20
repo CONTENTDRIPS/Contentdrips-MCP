@@ -1,0 +1,21 @@
+name = "contentdrips-mcp"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Migrate away from the old Durable Object (now using stateless createMcpHandler)
+[[migrations]]
+tag = "v2"
+deleted_classes = ["ContentDripsMCP"]
+
+# Production URL: https://mcp.contentdrips.com/mcp/YOUR_API_KEY
+# Workers URL:    https://contentdrips-mcp.ukhalid639.workers.dev/mcp/YOUR_API_KEY
+
+[vars]
+LARAVEL_API_URL = "https://api.contentdrips.com"
+RENDERER_API_URL = "https://generate.contentdrips.com"
+
+# For local development, override these in .dev.vars:
+# LARAVEL_API_URL = "http://localhost:8000"
+# RENDERER_API_URL = "http://localhost:3000"
+
