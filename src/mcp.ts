@@ -12,7 +12,7 @@ interface Env {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Fetch a single image URL and return base64 for MCP inline image content. */
-async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+async function fetchAsBase64(url: string): Promise<{ data: string; media_type: string } | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
@@ -22,15 +22,27 @@ async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: str
     for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
     const data = btoa(binary);
     const ct = res.headers.get("content-type") || "";
-    const mimeType = ct.startsWith("image/")
+    const media_type = ct.startsWith("image/")
       ? ct.split(";")[0]
       : url.endsWith(".webp")
         ? "image/webp"
         : "image/jpeg";
-    return { data, mimeType };
+    return { data, media_type };
   } catch {
     return null;
   }
+}
+
+/** Build an MCP/Claude-compatible base64 image content block. */
+function buildBase64ImageContent(data: string, media_type: string) {
+  return {
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type,
+      data,
+    },
+  };
 }
 
 /** Format a date string as "May 20, 2026" */
@@ -269,7 +281,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           t.updated_at ? `Last edited: ${fmtDate(t.updated_at)}` : null,
         ].filter(Boolean).join("  |  ");
 
-        const content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [
+        const content: any[] = [
           {
             type: "text" as const,
             text: `**${t.name}**\n${meta}\n\n**[Open in editor](${editUrl})**`,
@@ -279,7 +291,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         if (t.thumbnail) {
           const thumb = await fetchAsBase64(t.thumbnail);
           if (thumb) {
-            content.unshift({ type: "image" as const, data: thumb.data, mimeType: thumb.mimeType });
+            content.unshift(buildBase64ImageContent(thumb.data, thumb.media_type));
           }
         }
 
