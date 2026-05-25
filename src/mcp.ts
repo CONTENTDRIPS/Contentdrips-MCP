@@ -11,6 +11,28 @@ interface Env {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Fetch a single image URL and return base64 for MCP inline image content. */
+async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const data = btoa(binary);
+    const ct = res.headers.get("content-type") || "";
+    const mimeType = ct.startsWith("image/")
+      ? ct.split(";")[0]
+      : url.endsWith(".webp")
+        ? "image/webp"
+        : "image/jpeg";
+    return { data, mimeType };
+  } catch {
+    return null;
+  }
+}
+
 /** Format a date string as "May 20, 2026" */
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return "—";
@@ -31,13 +53,6 @@ function mdCell(value: string): string {
   return value.replace(/\|/g, "\\|");
 }
 
-/** Markdown image for a template thumbnail. */
-function mdThumbnail(thumbnail?: string, alt = "Preview"): string {
-  if (!thumbnail) return "—";
-  const safeAlt = alt.replace(/[\[\]]/g, "");
-  return `![${safeAlt}](${thumbnail})`;
-}
-
 /** Build a markdown table for a list of templates/designs. */
 function buildTemplateTableMarkdown(
   templates: any[],
@@ -52,16 +67,15 @@ function buildTemplateTableMarkdown(
   const lines = [
     options?.title ?? `Found **${total}** design${total !== 1 ? "s" : ""}:`,
     "",
-    "| Preview | Name | ID | Type | Size | Updated | Open |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    "| Name | ID | Type | Size | Updated | Open |",
+    "| --- | --- | --- | --- | --- | --- |",
   ];
 
   for (const t of slice) {
     const editUrl = templateEditUrl(t.id, t.edit_url);
     const updated = t.updated_at ? fmtDate(t.updated_at) : "—";
-    const preview = mdThumbnail(t.thumbnail, t.name || "Preview");
     lines.push(
-      `| ${preview} | ${mdCell(t.name || "Untitled")} | \`${t.id}\` | ${t.type || "—"} | ${t.width}×${t.height} | ${updated} | [Open in editor](${editUrl}) |`
+      `| ${mdCell(t.name || "Untitled")} | \`${t.id}\` | ${t.type || "—"} | ${t.width}×${t.height} | ${updated} | [Open in editor](${editUrl}) |`
     );
   }
 
@@ -72,47 +86,39 @@ function buildTemplateTableMarkdown(
   return lines.join("\n");
 }
 
-/** Build markdown tables for template category listings. */
+/** Build a single markdown table of all template categories. */
 function buildCategoriesMarkdown(data: {
   type_categories?: any[];
   db_categories?: any[];
 }): string {
-  const typeCategories = data.type_categories || [];
-  const dbCategories = data.db_categories || [];
+  const categories = [
+    ...(data.type_categories || []).map((cat) => ({
+      label: cat.label || cat.slug,
+      template_count: cat.template_count,
+      search_category: cat.search_category || cat.slug,
+    })),
+    ...(data.db_categories || []).map((cat) => ({
+      label: cat.name,
+      template_count: cat.template_count,
+      search_category: cat.search_category || cat.name,
+    })),
+  ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 
-  if (typeCategories.length === 0 && dbCategories.length === 0) {
+  if (categories.length === 0) {
     return "No template categories found.";
   }
 
-  const lines = ["## Template categories", ""];
+  const lines = [
+    "## ContentDrips Template Categories",
+    "",
+    "| Category | Templates | Search with |",
+    "| --- | ---: | --- |",
+  ];
 
-  if (typeCategories.length > 0) {
+  for (const cat of categories) {
     lines.push(
-      "### Built-in types",
-      "",
-      "| Category | Slug | Templates | Use in search_templates |",
-      "| --- | --- | ---: | --- |"
+      `| ${mdCell(cat.label)} | ${cat.template_count ?? "—"} | \`category="${cat.search_category}"\` |`
     );
-    for (const cat of typeCategories) {
-      lines.push(
-        `| ${mdCell(cat.label || cat.slug)} | \`${cat.slug}\` | ${cat.template_count ?? "—"} | \`category="${cat.search_category || cat.slug}"\` |`
-      );
-    }
-    lines.push("");
-  }
-
-  if (dbCategories.length > 0) {
-    lines.push(
-      "### Topic categories",
-      "",
-      "| Category | ID | Templates | Use in search_templates |",
-      "| --- | --- | ---: | --- |"
-    );
-    for (const cat of dbCategories) {
-      lines.push(
-        `| ${mdCell(cat.name)} | \`${cat.id}\` | ${cat.template_count ?? "—"} | \`category="${cat.search_category || cat.name}"\` |`
-      );
-    }
   }
 
   return lines.join("\n");
@@ -143,10 +149,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     "get_template_categories",
     {
       description:
-        "List available public ContentDrips template categories — both built-in types (carousel, quote, tweet style, etc.) " +
-        "and dynamic topic categories from the library (e.g. LinkedIn, motivational). " +
-        "Use this when the user asks 'what template categories do you have', 'show me carousel templates', " +
-        "'quote templates', or any category of designs. Then call search_templates with the matching category slug/name.",
+        "List available ContentDrips template categories (carousel, quote, LinkedIn, motivational, etc.). " +
+        "Use when the user asks 'what template categories do you have', 'show me carousel templates', " +
+        "'quote templates', or any category of designs. Then call search_templates with the matching category.",
       inputSchema: {},
     },
     async () => {
@@ -169,7 +174,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "'find motivational templates', or search by keyword. " +
         "For category browsing, pass category (e.g. 'carousel', 'quote', or a topic category name). " +
         "Call get_template_categories first if you are unsure which categories exist. " +
-        "Returns a markdown table with thumbnail previews and an Open in editor link for each template.",
+        "Returns a markdown table with an Open in editor link for each template.",
       inputSchema: {
         query: z.string().optional().describe("Optional keyword search (e.g. 'motivational', 'linkedin', 'sale')"),
         category: z.string().optional().describe(
@@ -206,7 +211,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
       description:
         "Get the user's own saved templates/designs/graphics/carousels from their ContentDrips account. " +
         "Use when the user says 'show me my designs', 'my templates', 'my graphics', 'list my creatives', " +
-        "'what templates do I have', etc. Returns a markdown table with thumbnail previews and an Open in editor link for each design. " +
+        "'what templates do I have', etc. Returns a markdown table with an Open in editor link for each design. " +
         "Optionally filter by type or by profile/workspace using profile_id.",
       inputSchema: {
         type: z.string().optional().describe("Optional type filter: 'carousel', 'quote', 'graphic', etc."),
@@ -233,7 +238,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     "get_template",
     {
       description:
-        "Look up a single template (design, graphic, carousel) by its ID or name, show its thumbnail, and provide an editor link. " +
+        "Look up a single template (design, graphic, carousel) by its ID or name, show a thumbnail preview, and provide an editor link. " +
         "Use when the user asks: 'show me template 163191', 'open my FB Ad Creative v1', " +
         "'what does my Instagram Post design look like', etc. " +
         "Searches the user's own templates first, then public ContentDrips templates.",
@@ -264,13 +269,21 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           t.updated_at ? `Last edited: ${fmtDate(t.updated_at)}` : null,
         ].filter(Boolean).join("  |  ");
 
-        const thumbLine = t.thumbnail ? `${mdThumbnail(t.thumbnail, t.name)}\n\n` : "";
-        return {
-          content: [{
+        const content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [
+          {
             type: "text" as const,
-            text: `${thumbLine}**${t.name}**\n${meta}\n\n**[Open in editor](${editUrl})**`,
-          }],
-        };
+            text: `**${t.name}**\n${meta}\n\n**[Open in editor](${editUrl})**`,
+          },
+        ];
+
+        if (t.thumbnail) {
+          const thumb = await fetchAsBase64(t.thumbnail);
+          if (thumb) {
+            content.unshift({ type: "image" as const, data: thumb.data, mimeType: thumb.mimeType });
+          }
+        }
+
+        return { content };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
       }
