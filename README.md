@@ -1,6 +1,6 @@
 # ContentDrips MCP Server
 
-A Model Context Protocol (MCP) server that lets AI assistants (Claude, Cursor, etc.) generate carousels and graphics directly via ContentDrips.
+A Model Context Protocol (MCP) server that lets AI assistants (Claude, Cursor, etc.) generate carousels and graphics, manage posts, and publish to LinkedIn and Instagram directly via ContentDrips.
 
 **Production URL:** `https://mcp.contentdrips.com`
 
@@ -63,75 +63,124 @@ Go to **Cursor Settings → MCP → Add Server**:
 
 ## Available Tools
 
+### Template Tools
+
 | Tool | What it does |
 |------|-------------|
-| `search_templates` | Search public ContentDrips templates — returns **thumbnail previews**, template ID, type, size, and last-edited date |
-| `get_my_templates` | List your own saved templates — same rich view with thumbnails and last-edited date |
+| `search_templates` | Search public templates — returns thumbnail previews, ID, type, size, and last-edited date |
+| `get_my_templates` | List your saved templates — same rich view with thumbnails |
 | `get_template_structure` | Inspect a template's editable fields and labels |
-| `generate_ai_carousel` | Generate a carousel using AI from a topic, blog, YouTube URL, or TikTok/Reel URL |
+
+### Generation Tools
+
+| Tool | What it does |
+|------|-------------|
+| `generate_ai_carousel` | Generate a carousel using AI from a topic, blog, YouTube, or TikTok/Reel URL |
 | `generate_ai_graphic` | Generate a non-carousel graphic using AI (same input methods) |
-| `generate_carousel` | Generate a carousel from a custom JSON carousel object |
+| `generate_carousel` | Generate a carousel from a custom JSON structure |
 | `generate_graphic` | Generate a graphic from a custom `content_update` array |
-| `check_job_status` | Get the final `export_url` once a rendering job is complete |
+| `check_job_status` | Get the final `export_url` once rendering is complete |
+
+### Profile & Social Account Tools
+
+| Tool | What it does |
+|------|-------------|
+| `get_profiles` | Get your ContentDrips profiles and default profile_id |
+| `get_social_accounts` | Get connected LinkedIn/Instagram accounts for a profile |
+
+### Post Management Tools
+
+| Tool | What it does |
+|------|-------------|
+| `list_posts` | List posts by status (draft, scheduled, published) |
+| `get_post` | Get details of a specific post |
+| `create_post` | Create a new draft post with caption and optional images |
+| `update_post` | Update post caption or platform settings |
+| `delete_post` | Delete a post |
+| `attach_images_to_post` | Attach images from `export_urls` to an existing post |
+| `schedule_post` | Schedule a post for future publishing to LinkedIn/Instagram |
+| `unschedule_post` | Move a scheduled post back to drafts |
+| `publish_post` | Publish immediately to LinkedIn/Instagram |
 
 ---
 
-## Example Conversations
+## Example Workflows
 
-### Browse templates visually
+### Generate and Publish a Carousel
 
 ```
-You: Show me some carousel templates
+You: Create a LinkedIn carousel about 5 productivity tips and publish it
 
 Claude:
-1. Calls search_templates with query="carousel"
-2. Displays each template with its thumbnail image preview,
-   ID, type, dimensions, and last-edited date
+1. Calls search_templates → shows carousel templates with thumbnails
+2. "Which template would you like to use?"
+3. Calls generate_ai_carousel with your choice
+4. Polls check_job_status → gets export_urls
+5. Calls get_social_accounts to verify LinkedIn is connected
+   - If not connected: "Please connect LinkedIn at app.contentdrips.com/social-accounts"
+   - If connected: continues...
+6. Calls create_post with caption and export_urls
+7. Calls publish_post with linkedin_publish=true
+8. "Your carousel is being published to LinkedIn!"
 ```
 
-### AI Carousel from a topic
+### Schedule a Post for Later
 
 ```
-You: Create a LinkedIn carousel about 5 tips for freelancers
+You: Create a quote graphic and schedule it for tomorrow at 9am
 
 Claude:
-1. Searches for carousel templates (shows thumbnails)
-2. Asks which template you prefer (or picks one)
-3. Calls generate_ai_carousel with method="topic"
-4. Polls check_job_status until complete
-5. Returns the export_url with the rendered images
+1. Calls generate_ai_graphic
+2. Polls check_job_status → gets export_urls
+3. Calls create_post with caption and images
+4. Calls schedule_post with:
+   - scheduled_time: "2024-03-16T09:00:00"
+   - timezone: "America/New_York"
+   - linkedin_publish: true
+5. "Your post is scheduled for March 16 at 9am EST!"
 ```
 
-### AI Carousel from a YouTube video
+### View and Manage Posts
 
 ```
-You: Turn this YouTube video into a carousel: https://youtube.com/watch?v=...
+You: Show me my scheduled posts
 
 Claude:
-1. Calls generate_ai_carousel with method="youtube" and the URL
-2. Returns export_url once rendering is complete
-```
+1. Calls list_posts with status="scheduled"
+2. Displays list with captions, scheduled times, and platforms
 
-### AI Graphic from a topic
-
-```
-You: Create a quote graphic about morning routines using template 12345
+You: Unschedule the first one
 
 Claude:
-1. Calls generate_ai_graphic with method="topic"
-2. Returns the export_url of the rendered image
+1. Calls unschedule_post with the UUID
+2. "Post moved to drafts. You can edit or reschedule it later."
 ```
 
-### Custom JSON carousel
+### Quick Publish After Generation
 
 ```
-You: Generate a carousel with this exact content: [your JSON]
+You: Turn this YouTube video into a carousel and post to LinkedIn
+     https://youtube.com/watch?v=...
 
 Claude:
-1. Calls get_template_structure to validate the format
-2. Calls generate_carousel with your JSON
-3. Returns export_url with the image URLs
+1. Calls generate_ai_carousel with method="youtube"
+2. Polls check_job_status
+3. Calls get_social_accounts → confirms LinkedIn connected
+4. Calls create_post with export_urls
+5. Calls publish_post → starts publishing
+6. "Publishing to LinkedIn now! It should appear shortly."
 ```
+
+---
+
+## Social Account Requirements
+
+Before scheduling or publishing, you must have connected social accounts:
+
+- **LinkedIn**: Connect at [app.contentdrips.com/social-accounts](https://app.contentdrips.com/social-accounts)
+- **Instagram**: Connect your Instagram Business or Creator account
+
+The MCP will check this automatically and provide the connect URL if needed.
 
 ---
 
@@ -177,4 +226,3 @@ npm run deploy
 
 - Docs: [contentdrips.com/docs](https://contentdrips.com/docs)
 - Email: support@contentdrips.com
-# Contentdrips-MCP
