@@ -53,6 +53,46 @@ function templateEditUrl(id: number | string, editUrl?: string): string {
   return editUrl || `https://app.contentdrips.com/canvas?template=${id}`;
 }
 
+/** Human-readable label for template type slugs. */
+function formatTemplateType(type?: string): string {
+  const labels: Record<string, string> = {
+    graphic: "Single Image",
+    carousel: "Carousel",
+    quote: "Quote",
+    quote_new: "Quote",
+    tweet_style: "Tweet Style",
+    placard: "Placard",
+    evergreen: "Evergreen",
+    libanners: "LinkedIn Banner",
+  };
+  return labels[type || ""] || type || "—";
+}
+
+/** Structured markdown details for a single template lookup. */
+function buildTemplateDetailMarkdown(t: any): string {
+  const editUrl = templateEditUrl(t.id, t.edit_url);
+  const rows: [string, string][] = [
+    ["Name", mdCell(t.name || "Untitled")],
+    ["ID", `\`${t.id}\``],
+    ["Type", formatTemplateType(t.type)],
+    ["Size", `${t.width} × ${t.height} px`],
+  ];
+  if (t.updated_at) rows.push(["Last edited", fmtDate(t.updated_at)]);
+  if (t.slides) rows.push(["Slides", String(t.slides)]);
+
+  return [
+    "## Template details",
+    "",
+    "| Field | Value |",
+    "| --- | --- |",
+    ...rows.map(([field, value]) => `| ${field} | ${value} |`),
+    "",
+    `**[Open in editor](${editUrl})**`,
+    "",
+    "_A thumbnail preview is attached below. Present the table details clearly to the user in your reply._",
+  ].join("\n");
+}
+
 /** Escape pipe characters for markdown table cells. */
 function mdCell(value: string): string {
   return value.replace(/\|/g, "\\|");
@@ -243,9 +283,10 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     "get_template",
     {
       description:
-        "Look up a single template (design, graphic, carousel) by its ID or name, show a thumbnail preview, and provide an editor link. " +
-        "Use when the user asks: 'show me template 163191', 'open my FB Ad Creative v1', " +
-        "'what does my Instagram Post design look like', etc. " +
+        "Look up a single template (design, graphic, carousel) by its ID or name. " +
+        "Returns a structured markdown details table (name, ID, type, size, edit link) plus a thumbnail preview image. " +
+        "When replying to the user, present the markdown table fields clearly — do not summarize away the metadata. " +
+        "Use when the user asks: 'get details of template 149900', 'show me template 163191', 'open my FB Ad Creative v1', etc. " +
         "Searches the user's own templates first, then public ContentDrips templates.",
       inputSchema: {
         template_id: z.string().optional().describe("Numeric template ID (e.g. '163191')"),
@@ -266,27 +307,16 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           return { content: [{ type: "text" as const, text: "Template not found." }] };
         }
 
-        const editUrl = templateEditUrl(t.id, t.edit_url);
-        const meta = [
-          `ID: \`${t.id}\``,
-          `Type: ${t.type}`,
-          `Size: ${t.width}×${t.height}`,
-          t.updated_at ? `Last edited: ${fmtDate(t.updated_at)}` : null,
-        ].filter(Boolean).join("  |  ");
-
         const content: Array<
           { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
         > = [
-          {
-            type: "text" as const,
-            text: `**${t.name}**\n${meta}\n\n**[Open in editor](${editUrl})**`,
-          },
+          { type: "text" as const, text: buildTemplateDetailMarkdown(t) },
         ];
 
         if (t.thumbnail) {
           const thumb = await fetchAsBase64(t.thumbnail);
           if (thumb) {
-            content.unshift(buildMcpImageContent(thumb.data, thumb.mimeType));
+            content.push(buildMcpImageContent(thumb.data, thumb.mimeType));
           }
         }
 
