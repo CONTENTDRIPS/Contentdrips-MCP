@@ -11,7 +11,7 @@ interface Env {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Fetch a single image URL and return base64 for MCP inline image content. */
+/** Fetch a single image URL and return base64 for artifact embedding. */
 async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
@@ -33,9 +33,12 @@ async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: str
   }
 }
 
-/** Build a valid MCP tool-result image content block. */
-function buildMcpImageContent(data: string, mimeType: string) {
-  return { type: "image" as const, data, mimeType };
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /** Format a date string as "May 20, 2026" */
@@ -68,28 +71,71 @@ function formatTemplateType(type?: string): string {
   return labels[type || ""] || type || "—";
 }
 
-/** Structured markdown details for a single template lookup. */
-function buildTemplateDetailMarkdown(t: any): string {
+/** Build self-contained HTML for a Claude artifact with embedded thumbnail preview. */
+async function buildTemplateArtifactHtml(t: any): Promise<string> {
   const editUrl = templateEditUrl(t.id, t.edit_url);
-  const rows: [string, string][] = [
-    ["Name", mdCell(t.name || "Untitled")],
-    ["ID", `\`${t.id}\``],
-    ["Type", formatTemplateType(t.type)],
-    ["Size", `${t.width} × ${t.height} px`],
-  ];
-  if (t.updated_at) rows.push(["Last edited", fmtDate(t.updated_at)]);
-  if (t.slides) rows.push(["Slides", String(t.slides)]);
+  const name = escapeHtml(t.name || "Untitled");
+  const typeLabel = escapeHtml(formatTemplateType(t.type));
+  const size = escapeHtml(`${t.width} × ${t.height} px`);
+  const lastEdited = t.updated_at ? escapeHtml(fmtDate(t.updated_at)) : null;
 
+  let previewBlock = `<p style="color:#666;font-size:14px;">No preview available.</p>`;
+  if (t.thumbnail) {
+    const thumb = await fetchAsBase64(t.thumbnail);
+    if (thumb) {
+      previewBlock = `<img src="data:${thumb.mimeType};base64,${thumb.data}" alt="${name} preview" style="display:block;max-width:100%;max-height:480px;margin:0 auto;border-radius:12px;border:1px solid #e8e8e8;" />`;
+    }
+  }
+
+  const metaRows = [
+    ["ID", `\`${t.id}\``],
+    ["Type", typeLabel],
+    ["Size", size],
+    ...(lastEdited ? [["Last edited", lastEdited] as [string, string]] : []),
+    ...(t.slides ? [["Slides", String(t.slides)] as [string, string]] : []),
+  ];
+
+  const metaHtml = metaRows
+    .map(([label, value]) => {
+      const display =
+        value.startsWith("`") ? `<code>${escapeHtml(value.slice(1, -1))}</code>` : escapeHtml(value);
+      return (
+        `<div style="display:grid;grid-template-columns:110px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">` +
+        `<div style="color:#666;font-size:13px;">${escapeHtml(label)}</div>` +
+        `<div style="font-size:14px;">${display}</div>` +
+        `</div>`
+      );
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${name}</title>
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:0 auto;padding:24px;color:#111;">
+  <h1 style="margin:0 0 20px;font-size:24px;font-weight:600;">${name}</h1>
+  ${previewBlock}
+  <div style="margin:24px 0;">${metaHtml}</div>
+  <a href="${escapeHtml(editUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#111;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">Open in editor</a>
+</body>
+</html>`;
+}
+
+/** Tool result text instructing Claude to render the HTML as an artifact. */
+async function buildTemplateArtifactResponse(t: any): Promise<string> {
+  const html = await buildTemplateArtifactHtml(t);
+  const title = t.name || `Template ${t.id}`;
   return [
-    "## Template details",
+    `Create an HTML artifact titled "${title}" using the HTML below.`,
+    "Show the artifact to the user — do not replace it with a markdown summary.",
+    "The artifact includes the full thumbnail preview and template metadata.",
     "",
-    "| Field | Value |",
-    "| --- | --- |",
-    ...rows.map(([field, value]) => `| ${field} | ${value} |`),
-    "",
-    `**[Open in editor](${editUrl})**`,
-    "",
-    "_A thumbnail preview is attached below. Present the table details clearly to the user in your reply._",
+    "```html",
+    html,
+    "```",
   ].join("\n");
 }
 
@@ -284,9 +330,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Look up a single template (design, graphic, carousel) by its ID or name. " +
-        "Returns a structured markdown details table (name, ID, type, size, edit link) plus a thumbnail preview image. " +
-        "When replying to the user, present the markdown table fields clearly — do not summarize away the metadata. " +
-        "Use when the user asks: 'get details of template 149900', 'show me template 163191', 'open my FB Ad Creative v1', etc. " +
+        "Returns HTML for a Claude artifact with the full thumbnail preview, metadata, and an Open in editor button. " +
+        "You MUST create an HTML artifact from the returned HTML — do not reply with plain markdown instead. " +
+        "Use when the user asks: 'get details of template 149900', 'show me template 163191', etc. " +
         "Searches the user's own templates first, then public ContentDrips templates.",
       inputSchema: {
         template_id: z.string().optional().describe("Numeric template ID (e.g. '163191')"),
@@ -307,20 +353,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           return { content: [{ type: "text" as const, text: "Template not found." }] };
         }
 
-        const content: Array<
-          { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
-        > = [
-          { type: "text" as const, text: buildTemplateDetailMarkdown(t) },
-        ];
-
-        if (t.thumbnail) {
-          const thumb = await fetchAsBase64(t.thumbnail);
-          if (thumb) {
-            content.push(buildMcpImageContent(thumb.data, thumb.mimeType));
-          }
-        }
-
-        return { content };
+        return {
+          content: [{ type: "text" as const, text: await buildTemplateArtifactResponse(t) }],
+        };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
       }
