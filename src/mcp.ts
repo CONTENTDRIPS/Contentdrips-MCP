@@ -11,36 +11,6 @@ interface Env {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Fetch a single image URL and return base64 for artifact embedding. */
-async function fetchAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const data = btoa(binary);
-    const ct = res.headers.get("content-type") || "";
-    const mimeType = ct.startsWith("image/")
-      ? ct.split(";")[0]
-      : url.endsWith(".webp")
-        ? "image/webp"
-        : "image/jpeg";
-    return { data, mimeType };
-  } catch {
-    return null;
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 /** Format a date string as "May 20, 2026" */
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return "—";
@@ -71,71 +41,26 @@ function formatTemplateType(type?: string): string {
   return labels[type || ""] || type || "—";
 }
 
-/** Build self-contained HTML for a Claude artifact with embedded thumbnail preview. */
-async function buildTemplateArtifactHtml(t: any): Promise<string> {
+/** Structured markdown details for a single template lookup. */
+function buildTemplateDetailMarkdown(t: any): string {
   const editUrl = templateEditUrl(t.id, t.edit_url);
-  const name = escapeHtml(t.name || "Untitled");
-  const typeLabel = escapeHtml(formatTemplateType(t.type));
-  const size = escapeHtml(`${t.width} × ${t.height} px`);
-  const lastEdited = t.updated_at ? escapeHtml(fmtDate(t.updated_at)) : null;
-
-  let previewBlock = `<p style="color:#666;font-size:14px;">No preview available.</p>`;
-  if (t.thumbnail) {
-    const thumb = await fetchAsBase64(t.thumbnail);
-    if (thumb) {
-      previewBlock = `<img src="data:${thumb.mimeType};base64,${thumb.data}" alt="${name} preview" style="display:block;max-width:100%;max-height:480px;margin:0 auto;border-radius:12px;border:1px solid #e8e8e8;" />`;
-    }
-  }
-
-  const metaRows = [
+  const rows: [string, string][] = [
+    ["Name", mdCell(t.name || "Untitled")],
     ["ID", `\`${t.id}\``],
-    ["Type", typeLabel],
-    ["Size", size],
-    ...(lastEdited ? [["Last edited", lastEdited] as [string, string]] : []),
-    ...(t.slides ? [["Slides", String(t.slides)] as [string, string]] : []),
+    ["Type", formatTemplateType(t.type)],
+    ["Size", `${t.width} × ${t.height} px`],
   ];
+  if (t.updated_at) rows.push(["Last edited", fmtDate(t.updated_at)]);
+  if (t.slides) rows.push(["Slides", String(t.slides)]);
 
-  const metaHtml = metaRows
-    .map(([label, value]) => {
-      const display =
-        value.startsWith("`") ? `<code>${escapeHtml(value.slice(1, -1))}</code>` : escapeHtml(value);
-      return (
-        `<div style="display:grid;grid-template-columns:110px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;">` +
-        `<div style="color:#666;font-size:13px;">${escapeHtml(label)}</div>` +
-        `<div style="font-size:14px;">${display}</div>` +
-        `</div>`
-      );
-    })
-    .join("");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${name}</title>
-</head>
-<body style="font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:0 auto;padding:24px;color:#111;">
-  <h1 style="margin:0 0 20px;font-size:24px;font-weight:600;">${name}</h1>
-  ${previewBlock}
-  <div style="margin:24px 0;">${metaHtml}</div>
-  <a href="${escapeHtml(editUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#111;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">Open in editor</a>
-</body>
-</html>`;
-}
-
-/** Tool result text instructing Claude to render the HTML as an artifact. */
-async function buildTemplateArtifactResponse(t: any): Promise<string> {
-  const html = await buildTemplateArtifactHtml(t);
-  const title = t.name || `Template ${t.id}`;
   return [
-    `Create an HTML artifact titled "${title}" using the HTML below.`,
-    "Show the artifact to the user — do not replace it with a markdown summary.",
-    "The artifact includes the full thumbnail preview and template metadata.",
+    "## Template details",
     "",
-    "```html",
-    html,
-    "```",
+    "| Field | Value |",
+    "| --- | --- |",
+    ...rows.map(([field, value]) => `| ${field} | ${value} |`),
+    "",
+    `[Open in editor](${editUrl})`,
   ].join("\n");
 }
 
@@ -231,7 +156,16 @@ function buildTemplateContent(
  * bound as a closure. No Durable Objects required.
  */
 export function createContentDripsMcpHandler(apiToken: string, env: Env) {
-  const server = new McpServer({ name: "ContentDrips MCP", version: "1.0.0" });
+  const server = new McpServer(
+    { name: "ContentDrips MCP", version: "1.0.0" },
+    {
+      instructions:
+        "ContentDrips MCP helps create, edit, and publish social media designs and posts. " +
+        "All tool results use standard MCP text content (markdown tables and links). " +
+        "Do not expect inline image previews — share the Open in editor link so the user can view designs in ContentDrips. " +
+        "Editor URL pattern: https://app.contentdrips.com/canvas?template={id}",
+    }
+  );
   const laravel = new LaravelClient(env.LARAVEL_API_URL);
   const renderer = new RendererClient(env.RENDERER_API_URL);
 
@@ -330,8 +264,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Look up a single template (design, graphic, carousel) by its ID or name. " +
-        "Returns HTML for a Claude artifact with the full thumbnail preview, metadata, and an Open in editor button. " +
-        "You MUST create an HTML artifact from the returned HTML — do not reply with plain markdown instead. " +
+        "Returns a markdown details table and an Open in editor link. " +
         "Use when the user asks: 'get details of template 149900', 'show me template 163191', etc. " +
         "Searches the user's own templates first, then public ContentDrips templates.",
       inputSchema: {
@@ -354,7 +287,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         }
 
         return {
-          content: [{ type: "text" as const, text: await buildTemplateArtifactResponse(t) }],
+          content: [{ type: "text" as const, text: buildTemplateDetailMarkdown(t) }],
         };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };

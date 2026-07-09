@@ -53,6 +53,22 @@ Go to **Cursor Settings → MCP → Add Server**:
 
 ---
 
+### OpenClaw
+
+See `skills/contentdrips/SKILL.md` for full setup. Quick version:
+
+```bash
+export CONTENTDRIPS_API_KEY=your_api_key_here
+
+openclaw mcp set contentdrips "{
+  \"type\": \"streamable-http\",
+  \"url\": \"https://mcp.contentdrips.com/mcp\",
+  \"headers\": { \"Authorization\": \"Bearer $CONTENTDRIPS_API_KEY\" }
+}"
+```
+
+---
+
 ## Adding to Claude.ai (Web)
 
 1. Go to **Settings → Integrations → Add Integration**
@@ -67,9 +83,13 @@ Go to **Cursor Settings → MCP → Add Server**:
 
 | Tool | What it does |
 |------|-------------|
-| `search_templates` | Search public templates — returns thumbnail previews, ID, type, size, and last-edited date |
-| `get_my_templates` | List your saved templates — same rich view with thumbnails |
+| `get_template_categories` | List public template categories (carousel, quote, etc.) |
+| `search_templates` | Search/browse public templates by category or keyword — markdown table with editor links |
+| `get_my_templates` | List your saved templates — markdown table with editor links |
+| `get_template` | Look up one design by ID or name — details + editor link |
 | `get_template_structure` | Inspect a template's editable fields and labels |
+| `create_graphic` | Create a new blank design (presets or custom 100–3000 px) |
+| `delete_graphic` | Permanently delete a design |
 
 ### Generation Tools
 
@@ -80,6 +100,7 @@ Go to **Cursor Settings → MCP → Add Server**:
 | `generate_carousel` | Generate a carousel from a custom JSON structure |
 | `generate_graphic` | Generate a graphic from a custom `content_update` array |
 | `check_job_status` | Get the final `export_url` once rendering is complete |
+| `run_ai_design_agent` | Generate or edit a design via AI Design Agent → editor link |
 
 ### Profile & Social Account Tools
 
@@ -97,7 +118,19 @@ Go to **Cursor Settings → MCP → Add Server**:
 | `create_post` | Create a new draft post with caption and optional images |
 | `update_post` | Update post caption or platform settings |
 | `delete_post` | Delete a post |
-| `attach_images_to_post` | Attach images from `export_urls` to an existing post |
+
+### Post Image Tools
+
+| Tool | What it does |
+|------|-------------|
+| `set_post_images` | Attach ContentDrips `export_urls` to a post |
+| `upload_images_to_post` | Upload external images (URLs or base64) and attach to a post |
+| `remove_images_from_post` | Remove all images from a post |
+
+### Publishing Tools
+
+| Tool | What it does |
+|------|-------------|
 | `schedule_post` | Schedule a post for future publishing to LinkedIn/Instagram |
 | `unschedule_post` | Move a scheduled post back to drafts |
 | `publish_post` | Publish immediately to LinkedIn/Instagram |
@@ -112,7 +145,7 @@ Go to **Cursor Settings → MCP → Add Server**:
 You: Create a LinkedIn carousel about 5 productivity tips and publish it
 
 Claude:
-1. Calls search_templates → shows carousel templates with thumbnails
+1. Calls get_template_categories or search_templates → shows templates with editor links
 2. "Which template would you like to use?"
 3. Calls generate_ai_carousel with your choice
 4. Polls check_job_status → gets export_urls
