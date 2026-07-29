@@ -85,22 +85,23 @@ openclaw mcp set contentdrips "{
 |------|-------------|
 | `get_template_categories` | List public template categories (carousel, quote, etc.) |
 | `search_templates` | Search/browse public templates by category or keyword — markdown table with editor links |
-| `get_my_templates` | List your saved templates — markdown table with editor links |
+| `get_my_templates` | List your saved templates when you ask to show/pick one |
 | `get_template` | Look up one design by ID or name — details + editor link |
 | `get_template_structure` | Inspect a template's editable fields and labels |
-| `create_graphic` | Create a new blank design (presets or custom 100–3000 px) |
+| `create_graphic` | Create a blank design — first step when creating without a template ID |
 | `delete_graphic` | Permanently delete a design |
 
 ### Generation Tools
 
 | Tool | What it does |
 |------|-------------|
-| `generate_ai_carousel` | Generate a carousel using AI from a topic, blog, YouTube, or TikTok/Reel URL |
-| `generate_ai_graphic` | Generate a non-carousel graphic using AI (same input methods) |
-| `generate_carousel` | Generate a carousel from a custom JSON structure |
-| `generate_graphic` | Generate a graphic from a custom `content_update` array |
+| `run_ai_design_agent` | **Preferred** for new designs: design/edit via AI Design Agent → editor link |
+| `generate_ai_carousel` | Fill an **existing** carousel template from topic/blog/YouTube/TikTok (needs template ID) |
+| `generate_ai_graphic` | Fill an **existing** graphic template from the same sources (needs template ID) |
+| `generate_carousel` | Fill existing carousel with `carousel_content` JSON (template ID required) |
+| `generate_graphic` | Fill existing graphic with `content_update` array (template ID required) |
+| `render_template` | Export current design as PNG/PDF by template ID (after Design Agent or any saved design) |
 | `check_job_status` | Get the final `export_url` once rendering is complete |
-| `run_ai_design_agent` | Generate or edit a design via AI Design Agent → editor link |
 
 ### Profile & Social Account Tools
 
@@ -131,77 +132,71 @@ openclaw mcp set contentdrips "{
 
 | Tool | What it does |
 |------|-------------|
-| `schedule_post` | Schedule a post for future publishing to LinkedIn/Instagram |
+| `schedule_post` | Schedule for future — pass explicit platform booleans (only platforms the user named) |
 | `unschedule_post` | Move a scheduled post back to drafts |
-| `publish_post` | Publish immediately to LinkedIn/Instagram |
+| `publish_post` | Publish immediately — explicit platforms only; confirm naming platforms first |
 
 ---
 
 ## Example Workflows
 
-### Generate and Publish a Carousel
+### Create from Scratch (AI Design Agent — default)
 
 ```
-You: Create a LinkedIn carousel about 5 productivity tips and publish it
+You: Create a 3-slide carousel about 5 productivity tips
 
 Claude:
-1. Calls get_template_categories or search_templates → shows templates with editor links
-2. "Which template would you like to use?"
-3. Calls generate_ai_carousel with your choice
-4. Polls check_job_status → gets export_urls
-5. Calls get_social_accounts to verify LinkedIn is connected
-   - If not connected: "Please connect LinkedIn at app.contentdrips.com/social-accounts"
-   - If connected: continues...
-6. Calls create_post with caption and export_urls
-7. Calls publish_post with linkedin_publish=true
-8. "Your carousel is being published to LinkedIn!"
+1. Asks (if needed): blank + AI Design Agent (recommended) vs fill an existing template?
+2. Calls create_graphic(type="carousel", slides=3, format=...) → template_id
+3. Calls run_ai_design_agent(template_id, prompt=...)
+4. Shares editor link; to export PNG: render_template → check_job_status → export_url(s)
+```
+
+### Fill an Existing Template and Publish
+
+```
+You: Use template 5821, create a LinkedIn carousel about 5 productivity tips and publish it
+
+Claude:
+1. Calls generate_ai_carousel with template_id=5821
+2. Polls check_job_status → gets export_urls
+3. Calls get_social_accounts to verify LinkedIn is connected
+4. Calls create_post with caption and export_urls
+5. Calls publish_post with linkedin_publish=true, instagram_publish=false (after confirmation naming LinkedIn)
 ```
 
 ### Schedule a Post for Later
 
 ```
-You: Create a quote graphic and schedule it for tomorrow at 9am
+You: Create a square quote graphic about email marketing and schedule it for tomorrow at 9am
 
 Claude:
-1. Calls generate_ai_graphic
-2. Polls check_job_status → gets export_urls
-3. Calls create_post with caption and images
-4. Calls schedule_post with:
-   - scheduled_time: "2024-03-16T09:00:00"
-   - timezone: "America/New_York"
-   - linkedin_publish: true
-5. "Your post is scheduled for March 16 at 9am EST!"
+1. Calls create_graphic(type="graphic", format="square") → run_ai_design_agent
+2. Calls render_template → check_job_status → export_urls
+3. Calls create_post / schedule_post with images
 ```
 
-### View and Manage Posts
+### Export PNG of an existing design
 
 ```
-You: Show me my scheduled posts
+You: Export template 163500 as PNG
 
 Claude:
-1. Calls list_posts with status="scheduled"
-2. Displays list with captions, scheduled times, and platforms
-
-You: Unschedule the first one
-
-Claude:
-1. Calls unschedule_post with the UUID
-2. "Post moved to drafts. You can edit or reschedule it later."
+1. get_template / know type → carousel or graphic
+2. render_template(template_id, profile_id, type, output="png")
+3. check_job_status → export_url(s)
 ```
 
-### Quick Publish After Generation
+### Quick Publish from YouTube (with template)
 
 ```
-You: Turn this YouTube video into a carousel and post to LinkedIn
+You: Use my Blue Corporate template — turn this YouTube into a carousel and post to LinkedIn
      https://youtube.com/watch?v=...
 
 Claude:
-1. Calls generate_ai_carousel with method="youtube"
-2. Polls check_job_status
-3. Calls get_social_accounts → confirms LinkedIn connected
-4. Calls create_post with export_urls
-5. Calls publish_post → starts publishing
-6. "Publishing to LinkedIn now! It should appear shortly."
+1. Resolves template ID (user named it or gave an ID)
+2. Calls generate_ai_carousel with method="youtube"
+3. Polls check_job_status → create_post → publish_post(linkedin_publish=true, instagram_publish=false) after confirmation
 ```
 
 ---

@@ -159,11 +159,53 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   const server = new McpServer(
     { name: "ContentDrips MCP", version: "1.0.0" },
     {
-      instructions:
-        "ContentDrips MCP helps create, edit, and publish social media designs and posts. " +
-        "All tool results use standard MCP text content (markdown tables and links). " +
-        "Do not expect inline image previews — share the Open in editor link so the user can view designs in ContentDrips. " +
+      instructions: [
+        "ContentDrips MCP helps create, edit, and publish social media designs and posts.",
+        "All tool results use standard MCP text content (markdown tables and links).",
+        "Do not expect inline image previews — share the Open in editor link so the user can view designs in ContentDrips.",
         "Editor URL pattern: https://app.contentdrips.com/canvas?template={id}",
+        "",
+        "## MAIN FLOW — always ask first (all create cases)",
+        "Applies to: carousel, graphic, quote, design, or social post from topic / YouTube / blog / TikTok / 'fit this into a carousel'.",
+        "LinkedIn and Instagram equally. Never hallucinate or auto-pick a template.",
+        "",
+        "### Two tools — know the difference",
+        "- AI Design Agent (run_ai_design_agent): builds a NEW layout with AI. On an EXISTING template it REMOVES/OVERRIDES the current design and replaces it. Destructive to the old canvas.",
+        "- AI carousel maker / AI graphic maker (generate_ai_carousel / generate_ai_graphic): REQUIRES a template_id. KEEPS the template layout and fills it with new topic / blog / YouTube / TikTok content. Does NOT redesign the layout.",
+        "",
+        "### STEP 1 — No template yet?",
+        "ASK: A) AI Design Agent on a NEW blank design, OR B) Choose an existing template (name/ID)?",
+        "",
+        "### STEP 2A — User chose Design Agent / new blank",
+        "create_graphic → run_ai_design_agent → render_template + check_job_status for PNG.",
+        "",
+        "### STEP 2B — User has or chose a template ID (name/ID)",
+        "ALWAYS ask explicitly before proceeding (do not assume):",
+        "  1) AI Design Agent — WARNING: overrides/removes the existing design on this template and generates a new one with AI, OR",
+        "  2) AI carousel maker / AI graphic maker — keep this template's layout; fill with new topic/URL/YouTube/TikTok (recommended for 'new topic on this template').",
+        "If they want maker (default for content fill):",
+        "  get_template → get_template_structure (REQUIRED before generate_ai_*) →",
+        "  carousel type → generate_ai_carousel; graphic/quote → generate_ai_graphic;",
+        "  method=topic|blog|youtube|tiktok_reel → check_job_status.",
+        "If they want Design Agent on that template_id: run_ai_design_agent (knowing it overrides) → optional render_template.",
+        "Never call run_ai_design_agent for 'new topic/URL on this template' unless they explicitly chose Design Agent after the warning.",
+        "Manual/LLM JSON fill (optional third path on a template_id): get_template_structure → generate_carousel(carousel_content) or generate_graphic(content_update) — full control over fields; not AI maker.",
+        "",
+        "### STEP 3 — Social post (optional)",
+        "create_post → set_post_images → schedule/publish ONLY platforms they named.",
+        "",
+        "### Browse tools",
+        "get_my_templates / search_templates only when user asks to show/find/pick, or needs help after choosing existing template. Never silent auto-pick.",
+        "",
+        "### Export PNG/PDF",
+        "run_ai_design_agent does not return PNG. Use render_template → check_job_status. Do NOT say export is unavailable.",
+        "",
+        "### Platforms (symmetric — LinkedIn and Instagram)",
+        "ONLY platforms the user EXPLICITLY named. Never add the other.",
+        "Instagram only → instagram_publish=true, linkedin_publish=false.",
+        "LinkedIn only → linkedin_publish=true, instagram_publish=false.",
+        "Confirm naming platforms. Always pass BOTH as explicit true/false.",
+      ].join("\n"),
     }
   );
   const laravel = new LaravelClient(env.LARAVEL_API_URL);
@@ -195,8 +237,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Browse or search public ContentDrips templates (designs, graphics, creatives, carousels, quote cards). " +
-        "Use when the user asks to 'show me some carousel templates', 'quote templates', 'LinkedIn designs', " +
-        "'find motivational templates', or search by keyword. " +
+        "Use ONLY when the user asks to show, find, browse, or pick a template — not as a silent step before creating content. " +
+        "Do NOT call this to auto-select a template for generate_ai_carousel / generate_ai_graphic. " +
         "For category browsing, pass category (e.g. 'carousel', 'quote', or a topic category name). " +
         "Call get_template_categories first if you are unsure which categories exist. " +
         "Returns a markdown table with an Open in editor link for each template.",
@@ -235,8 +277,10 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Get the user's own saved templates/designs/graphics/carousels from their ContentDrips account. " +
-        "Use when the user says 'show me my designs', 'my templates', 'my graphics', 'list my creatives', " +
-        "'what templates do I have', etc. Returns a markdown table with an Open in editor link for each design. " +
+        "Use ONLY when the user says 'show me my designs', 'my templates', 'list my creatives', or explicitly wants to pick one of their templates. " +
+        "Do NOT call this to auto-pick a template when the user asks to create a new carousel/graphic — " +
+        "for creation without a template ID, use create_graphic + run_ai_design_agent instead. " +
+        "Returns a markdown table with an Open in editor link for each design. " +
         "Optionally filter by type or by profile/workspace using profile_id.",
       inputSchema: {
         type: z.string().optional().describe("Optional type filter: 'carousel', 'quote', 'graphic', etc."),
@@ -301,9 +345,11 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Create a new blank design (graphic, carousel, quote) in the user's ContentDrips account. " +
-        "Use this when the user says 'create a new design', 'make a new carousel', 'new template', etc. " +
-        "Ask the user: 1) a name for the design, 2) carousel or single graphic, " +
-        "3) format/dimensions if not specified. The design is created blank and ready to edit at the returned URL. " +
+        "MAIN FLOW path A: only after the user chose AI Design Agent / new blank (always ask Design Agent vs choose template first for create requests). " +
+        "Then usually run_ai_design_agent on the returned template_id. " +
+        "Do NOT substitute an existing template from get_my_templates/search_templates. " +
+        "Infer type/format/slides from the request when clear (e.g. 3 slides → type=carousel, slides=3; LinkedIn square → format=square). " +
+        "Ask only for missing essentials (name if needed, format if ambiguous). " +
         "Custom pixel sizes ARE supported (100–3000 px): when the user gives exact dimensions like 1200×1200, " +
         "set format to 'custom' and pass width + height — do NOT fall back to a preset.",
       inputSchema: {
@@ -373,11 +419,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     "run_ai_design_agent",
     {
       description:
-        "Run the AI Design Agent on a template to generate or edit a Fabric.js canvas design. " +
-        "Use this when the user wants to: generate a design from a prompt, redesign an existing template, " +
-        "or make AI-driven edits to a graphic (e.g. 'change the background to dark blue', 'add a subtitle'). " +
-        "The agent writes professional Fabric.js JSON covering typography, layout, colors, and decorative elements. " +
-        "For carousels, all slides are designed. The result is saved automatically — share the edit_url with the user to view and edit it.",
+        "AI Design Agent — builds a NEW Fabric.js layout with AI. " +
+        "On a blank (create_graphic first): MAIN FLOW path for from-scratch designs. " +
+        "On an EXISTING template_id: WARNING — removes/overrides the current design and replaces it with a new AI layout. " +
+        "When the user already has a template ID and wants new topic/URL/YouTube content, do NOT use this by default — " +
+        "ASK explicitly: Design Agent (override design) vs AI carousel/graphic maker (keep layout, fill content). " +
+        "Recommend maker for content-fill. Only call this on an existing template after they confirm they want the override. " +
+        "Does not return PNG — use render_template + check_job_status. Share the edit_url.",
       inputSchema: {
         template_id: z.string().describe(
           "The template ID to run the AI agent on. Create one first with create_graphic if needed."
@@ -402,7 +450,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           `AI design complete!\n\n` +
           `**${result.name}** (ID: \`${result.template_id}\`)\n` +
           `${result.summary}\n\n` +
-          `**View & edit your design:** ${result.edit_url}`;
+          `**View & edit your design:** ${result.edit_url}\n\n` +
+          `To export PNG/PDF of this design, call \`render_template\` with template_id=\`${result.template_id}\` ` +
+          `(type=carousel or graphic) and profile_id, then \`check_job_status\` for export_url(s).`;
 
         return { content: [{ type: "text" as const, text }] };
       } catch (error: any) {
@@ -415,7 +465,10 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_template_structure",
     {
-      description: "Inspect a template's field structure (use before generating to understand what fields exist)",
+      description:
+        "REQUIRED before generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic. " +
+        "Inspects editable field labels/types so you can build carousel_content or content_update correctly. " +
+        "For manual JSON fill: get_template → get_template_structure → generate_carousel (carousel_content) or generate_graphic (content_update).",
       inputSchema: {
         template_id: z.string().describe("The template ID to inspect"),
       },
@@ -434,9 +487,17 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "generate_ai_carousel",
     {
-      description: "Generate a carousel using AI from a topic, blog, YouTube, or TikTok/Reel URL",
+      description:
+        "AI carousel maker: for when the user gives a template_id and wants NEW content (topic / blog / YouTube / TikTok) " +
+        "filled into that carousel while KEEPING the existing layout. " +
+        "Not for Design Agent — Design Agent overrides the whole design. " +
+        "If they have a template ID but have not chosen a path, ASK: Design Agent (overrides design) vs this maker (keep layout) — recommend this maker for content-fill. " +
+        "REQUIRED order: get_template → get_template_structure → this tool. Then check_job_status. " +
+        "Do NOT auto-pick a template. For brand-new designs with no template, ask MAIN FLOW first (blank Design Agent vs choose template).",
       inputSchema: {
-        template_id: z.string().describe("Carousel template ID"),
+        template_id: z.string().describe(
+          "Existing carousel template ID — must be provided or chosen by the user. Do not invent or auto-pick."
+        ),
         method: z.enum(["topic", "blog", "youtube", "tiktok_reel"]).describe(
           "'topic' = free text idea | 'blog' = blog URL | 'youtube' = YouTube URL | 'tiktok_reel' = TikTok/Reel URL"
         ),
@@ -461,9 +522,17 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "generate_ai_graphic",
     {
-      description: "Generate a non-carousel graphic using AI from a topic, blog, YouTube, or TikTok/Reel URL",
+      description:
+        "AI graphic maker: for when the user gives a template_id and wants NEW content (topic / blog / YouTube / TikTok) " +
+        "filled into that graphic/quote while KEEPING the existing layout. " +
+        "Not for Design Agent — Design Agent overrides the whole design. " +
+        "If they have a template ID but have not chosen a path, ASK: Design Agent (overrides design) vs this maker (keep layout) — recommend this maker for content-fill. " +
+        "REQUIRED order: get_template → get_template_structure → this tool. Then check_job_status. " +
+        "Use for non-carousel types; use generate_ai_carousel for carousels. Do NOT auto-pick a template.",
       inputSchema: {
-        template_id: z.string().describe("Graphic template ID (non-carousel only)"),
+        template_id: z.string().describe(
+          "Existing graphic template ID (non-carousel) — must be provided or chosen by the user. Do not invent or auto-pick."
+        ),
         method: z.enum(["topic", "blog", "youtube", "tiktok_reel"]).describe(
           "'topic' = free text idea | 'blog' = blog URL | 'youtube' = YouTube URL | 'tiktok_reel' = TikTok/Reel URL"
         ),
@@ -484,23 +553,38 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     }
   );
 
-  // Tool 6: Generate Carousel (custom JSON)
+  // Tool 6: Generate Carousel (manual carousel_content JSON on a template)
   server.registerTool(
     "generate_carousel",
     {
-      description: "Generate a carousel from a custom JSON structure. Call get_template_structure first if unsure of the format.",
+      description:
+        "Fill an EXISTING carousel template with manual/LLM-written JSON (carousel_content). template_id is required. " +
+        "Use when the user (or you) wants full control over slide text/images based on get_template_structure — " +
+        "not the AI carousel maker (generate_ai_carousel) and not Design Agent. " +
+        "REQUIRED order: get_template → get_template_structure → build carousel_content matching field labels → this tool → check_job_status. " +
+        "carousel_content shape: { carousel_topic?, intro_slide?: { elements: { [label]: { type, value, via?, image_query? } } }, " +
+        "slides: [{ elements: {...} }], ending_slide?: { elements: {...} } }. " +
+        "Element types are typically 'text' or 'image'. For Unsplash images use via='unsplash' and image_query.",
       inputSchema: {
-        template_id: z.string().describe("Carousel template ID"),
-        carousel: z.any().describe("Carousel JSON: { intro_slide, slides: [...], ending_slide }"),
+        template_id: z.string().describe("Required. Existing carousel template ID — do not invent or auto-pick."),
+        carousel_content: z.any().describe(
+          "Required. Carousel JSON matching template structure. Example: " +
+          "{ carousel_topic: 'Optional topic', " +
+          "intro_slide: { elements: { heading: { type: 'text', value: 'Welcome' }, description: { type: 'text', value: '...' }, " +
+          "image: { type: 'image', value: 'https://...' } } }, " +
+          "slides: [{ elements: { heading: { type: 'text', value: 'Feature 1' }, " +
+          "image: { type: 'image', value: '...', via: 'unsplash', image_query: 'workspace desk' } } }], " +
+          "ending_slide: { elements: { heading: { type: 'text', value: 'Thank You!' } } } }"
+        ),
         profile_id: z.string().describe("Your ContentDrips profile ID"),
-        branding: z.any().optional().describe("Branding: { name, bio, handle, website_url, avatar_image_url }"),
+        branding: z.any().optional().describe("Optional branding: { name, bio, handle, website_url, avatar_image_url }"),
         output: z.enum(["png", "pdf"]).default("png").describe("Output format"),
       },
     },
-    async ({ template_id, carousel, profile_id, branding, output }) => {
+    async ({ template_id, carousel_content, profile_id, branding, output }) => {
       try {
         const result = await renderer.generateCarousel({
-          template_id, carousel, branding, output, profile_id, api_key: apiToken,
+          template_id, carousel_content, branding, output, profile_id, api_key: apiToken,
         });
         return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error: any) {
@@ -509,18 +593,26 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     }
   );
 
-  // Tool 7: Generate Graphic (custom content_update)
+  // Tool 7: Generate Graphic (manual content_update JSON on a template)
   server.registerTool(
     "generate_graphic",
     {
-      description: "Generate a non-carousel graphic from a content_update array. Call get_template_structure first to get field labels.",
+      description:
+        "Fill an EXISTING graphic/quote template with a manual/LLM-written content_update array. template_id is required. " +
+        "Use when the user (or you) wants full control over field values based on get_template_structure — " +
+        "not the AI graphic maker (generate_ai_graphic) and not Design Agent. " +
+        "REQUIRED order: get_template → get_template_structure → build content_update using exact field labels → this tool → check_job_status. " +
+        "Each item: { type: 'textbox'|'image', label: '<field label from structure>', value: '...', fontSize?, fontColor?, textboxMaxHeight? }.",
       inputSchema: {
-        template_id: z.string().describe("Graphic template ID"),
+        template_id: z.string().describe("Required. Existing graphic/quote template ID — do not invent or auto-pick."),
         content_update: z.array(z.any()).describe(
-          "Array of updates: [{ type: 'textbox'|'image', label: '...', value: '...' }]"
+          "Required. Array of field updates matching get_template_structure labels. Example: " +
+          "[{ type: 'textbox', label: 'headline', value: 'Flash Sale Alert!', fontSize: '56', fontColor: '#FF6B6B', textboxMaxHeight: 'auto' }, " +
+          "{ type: 'textbox', label: 'subheadline', value: '50% OFF Everything', fontSize: '32', fontColor: '#4ECDC4', textboxMaxHeight: 150 }, " +
+          "{ type: 'textbox', label: 'cta', value: 'SHOP NOW', fontSize: '36', fontColor: '#FFFFFF', textboxMaxHeight: 100 }]"
         ),
         profile_id: z.string().describe("Your ContentDrips profile ID"),
-        branding: z.any().optional().describe("Optional branding object"),
+        branding: z.any().optional().describe("Optional branding: { name, bio, handle, website_url, avatar_image_url }"),
         output: z.enum(["png", "pdf"]).default("png").describe("Output format"),
       },
     },
@@ -536,13 +628,46 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     }
   );
 
+  // Tool 7b: Render current template canvas to PNG/PDF (no content rewrite)
+  server.registerTool(
+    "render_template",
+    {
+      description:
+        "Export the CURRENT saved design for a template_id as PNG or PDF (render job → export_url). " +
+        "Does NOT rewrite content — use after run_ai_design_agent, or anytime the user wants PNG/PDF of an existing design. " +
+        "Works for both carousels and single-image graphics: set type to 'carousel' or 'graphic' (check get_template if unsure). " +
+        "Then call check_job_status with the returned job_id to get export_url(s). " +
+        "Use this instead of saying export is unavailable.",
+      inputSchema: {
+        template_id: z.string().describe("Template/design ID to render as-is"),
+        profile_id: z.string().describe("Your ContentDrips profile ID"),
+        type: z.enum(["carousel", "graphic"]).describe(
+          "'carousel' for multi-slide designs; 'graphic' for single-image / quote designs"
+        ),
+        output: z.enum(["png", "pdf"]).default("png").describe("Output format (default: png)"),
+      },
+    },
+    async ({ template_id, profile_id, type, output }) => {
+      try {
+        const result = await renderer.renderTemplate({
+          template_id, profile_id, type, output, api_key: apiToken,
+        });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (error: any) {
+        return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
+      }
+    }
+  );
+
   // Tool 8: Check Job Status
   server.registerTool(
     "check_job_status",
     {
-      description: "Get the final export_url once a rendering job is complete",
+      description:
+        "Poll a render job and get export_url(s) (PNG/PDF download links) when complete. " +
+        "Use after render_template, generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic.",
       inputSchema: {
-        job_id: z.string().describe("Job ID returned from any generate tool"),
+        job_id: z.string().describe("Job ID returned from render_template or any generate tool"),
       },
     },
     async ({ job_id }) => {
@@ -715,12 +840,15 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "update_post",
     {
-      description: "Update a post's caption or platform settings",
+      description:
+        "Update a post's caption or platform flags. " +
+        "Only set linkedin_publish/instagram_publish true for platforms the user explicitly requested. " +
+        "Do not enable LinkedIn by default when the user asked for Instagram (or vice versa).",
       inputSchema: {
         uuid: z.string().describe("The post UUID"),
         caption: z.string().optional().describe("New caption"),
-        linkedin_publish: z.boolean().optional().describe("Enable LinkedIn publishing"),
-        instagram_publish: z.boolean().optional().describe("Enable Instagram publishing"),
+        linkedin_publish: z.boolean().optional().describe("Enable LinkedIn only if the user asked for LinkedIn"),
+        instagram_publish: z.boolean().optional().describe("Enable Instagram only if the user asked for Instagram"),
       },
     },
     async ({ uuid, caption, linkedin_publish, instagram_publish }) => {
@@ -766,7 +894,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "CASE 1 — Attach ContentDrips-generated images to a post. " +
-        "Use this after generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic + check_job_status. " +
+        "Use this after render_template, generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic + check_job_status. " +
         "Pass the export_url values exactly as returned (full S3 URLs, full CDN URLs, or relative paths — all are handled). " +
         "The server strips any prefix and stores only the relative path. No re-uploading.",
       inputSchema: {
@@ -854,37 +982,60 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "schedule_post",
     {
-      description: "Schedule a post for future publishing to LinkedIn and/or Instagram",
+      description:
+        "Schedule a post for future publishing. " +
+        "ONLY enable platforms the user explicitly named. " +
+        "If they said Instagram only → instagram_publish=true, linkedin_publish=false. " +
+        "Never add LinkedIn (or Instagram) just because it is connected. Ask if unclear. " +
+        "Both linkedin_publish and instagram_publish are required explicit booleans.",
       inputSchema: {
         uuid: z.string().describe("The post UUID"),
         scheduled_time: z.string().describe("Schedule time in ISO format (e.g. '2024-03-15T09:00:00')"),
         timezone: z.string().describe("User's timezone (e.g. 'America/New_York', 'UTC', 'Europe/London')"),
-        linkedin_publish: z.boolean().optional().describe("Publish to LinkedIn (default: false)"),
-        instagram_publish: z.boolean().optional().describe("Publish to Instagram (default: false)"),
+        linkedin_publish: z.boolean().describe(
+          "Required. true only if the user explicitly asked to schedule on LinkedIn; otherwise false."
+        ),
+        instagram_publish: z.boolean().describe(
+          "Required. true only if the user explicitly asked to schedule on Instagram; otherwise false."
+        ),
         linkedin_account_id: z.number().optional().describe("Specific LinkedIn account ID (uses default if not specified)"),
         instagram_account_id: z.number().optional().describe("Specific Instagram account ID (uses default if not specified)"),
       },
     },
     async ({ uuid, scheduled_time, timezone, linkedin_publish, instagram_publish, linkedin_account_id, instagram_account_id }) => {
+      const li = linkedin_publish === true;
+      const ig = instagram_publish === true;
+      if (!li && !ig) {
+        return {
+          content: [{
+            type: "text" as const,
+            text:
+              "Error: At least one platform must be true. " +
+              "Ask the user which platform(s) to schedule on, then pass linkedin_publish and instagram_publish explicitly.",
+          }],
+          isError: true,
+        };
+      }
+
       try {
         const result = await laravel.schedulePost(uuid, apiToken, {
           scheduled_time,
           timezone,
-          linkedin_publish,
-          instagram_publish,
+          linkedin_publish: li,
+          instagram_publish: ig,
           linkedin_account_id,
           instagram_account_id,
         });
-        
+
         const platforms = [];
         if (result.linkedin_publish) platforms.push("LinkedIn");
         if (result.instagram_publish) platforms.push("Instagram");
-        
-        return { content: [{ type: "text" as const, text: 
+
+        return { content: [{ type: "text" as const, text:
           `Post scheduled!\n\n` +
           `UUID: \`${result.uuid}\`\n` +
           `Scheduled time (UTC): ${result.scheduled_time_utc}\n` +
-          `Platforms: ${platforms.join(", ")}`
+          `Platforms: ${platforms.join(", ") || "None"}`
         }] };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
@@ -914,15 +1065,19 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     "publish_post",
     {
       description:
-        "Publish a post immediately to LinkedIn and/or Instagram. " +
-        "IMPORTANT: Before calling this tool you MUST ask the user for explicit confirmation. " +
-        "Say something like: 'Are you sure you want to publish this post right now? Reply yes to confirm.' " +
-        "Only call this tool after the user has confirmed with yes/ok/go ahead.",
+        "Publish a post immediately. ONLY enable platforms the user EXPLICITLY named — no LinkedIn bias. " +
+        "Instagram-only request → instagram_publish=true, linkedin_publish=false. Never publish to an extra platform. " +
+        "Before calling: confirm with platforms named, e.g. 'Publish to Instagram only right now? Reply yes to confirm.' " +
+        "Only call after the user confirms yes/ok/go ahead. Both linkedin_publish and instagram_publish are required booleans.",
       inputSchema: {
         uuid: z.string().describe("The post UUID"),
-        confirmed: z.boolean().describe("Must be true — set only after the user has explicitly confirmed they want to publish now"),
-        linkedin_publish: z.boolean().optional().describe("Publish to LinkedIn"),
-        instagram_publish: z.boolean().optional().describe("Publish to Instagram"),
+        confirmed: z.boolean().describe("Must be true — set only after the user explicitly confirmed publish, including which platform(s)"),
+        linkedin_publish: z.boolean().describe(
+          "Required. true only if the user explicitly asked to publish on LinkedIn; otherwise false."
+        ),
+        instagram_publish: z.boolean().describe(
+          "Required. true only if the user explicitly asked to publish on Instagram; otherwise false."
+        ),
         linkedin_account_id: z.number().optional().describe("Specific LinkedIn account ID (optional — uses default if omitted)"),
         instagram_account_id: z.number().optional().describe("Specific Instagram account ID (optional — uses default if omitted)"),
       },
@@ -930,23 +1085,40 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     async ({ uuid, confirmed, linkedin_publish, instagram_publish, linkedin_account_id, instagram_account_id }) => {
       if (!confirmed) {
         return { content: [{ type: "text" as const, text:
-          "Publishing was not confirmed. Please ask the user: \"Are you sure you want to publish this post right now? Reply yes to confirm.\""
+          "Publishing was not confirmed. Ask the user and name platforms, e.g. " +
+          "\"Publish to Instagram only right now? Reply yes to confirm.\""
         }] };
+      }
+
+      const li = linkedin_publish === true;
+      const ig = instagram_publish === true;
+      if (!li && !ig) {
+        return {
+          content: [{
+            type: "text" as const,
+            text:
+              "Error: At least one platform must be true. " +
+              "Ask which platform(s) to publish to, then pass linkedin_publish and instagram_publish explicitly " +
+              "(e.g. Instagram only → linkedin_publish=false, instagram_publish=true).",
+          }],
+          isError: true,
+        };
       }
 
       try {
         const result = await laravel.publishPost(uuid, apiToken, {
-          linkedin_publish,
-          instagram_publish,
+          linkedin_publish: li,
+          instagram_publish: ig,
           linkedin_account_id,
           instagram_account_id,
         });
-        
-        return { content: [{ type: "text" as const, text: 
+
+        return { content: [{ type: "text" as const, text:
           `${result.message}\n\n` +
           `UUID: \`${result.uuid}\`\n` +
           `Status: ${result.status}\n` +
-          `Platforms: ${result.platforms?.join(", ") || "None"}`
+          `Platforms requested: ${[li && "LinkedIn", ig && "Instagram"].filter(Boolean).join(", ")}\n` +
+          `Platforms reported: ${result.platforms?.join(", ") || "None"}`
         }] };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };

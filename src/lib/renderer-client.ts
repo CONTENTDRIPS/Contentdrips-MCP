@@ -23,7 +23,7 @@ interface GenerateAiGraphicParams {
 
 interface GenerateCarouselParams {
   template_id: string;
-  carousel: any;
+  carousel_content: any;
   branding?: any;
   output?: "png" | "pdf";
   api_key: string;
@@ -37,6 +37,15 @@ interface GenerateGraphicParams {
   output?: "png" | "pdf";
   api_key: string;
   profile_id: string;
+}
+
+interface RenderTemplateParams {
+  template_id: string;
+  profile_id: string;
+  output?: "png" | "pdf";
+  api_key: string;
+  /** When "carousel", uses the carousel-maker render path; otherwise standard graphic render. */
+  type?: "carousel" | "graphic";
 }
 
 export class RendererClient {
@@ -99,7 +108,7 @@ export class RendererClient {
   }
 
   /**
-   * Generate carousel with custom JSON content.
+   * Generate carousel by applying carousel_content JSON to an existing template.
    */
   async generateCarousel(params: GenerateCarouselParams): Promise<any> {
     return this.request("/render?tool=carousel-maker", params.api_key, {
@@ -108,13 +117,13 @@ export class RendererClient {
       profile_id: params.profile_id,
       tool: "carousel-maker",
       output: params.output || "png",
-      carousel: params.carousel,
+      carousel_content: params.carousel_content,
       branding: params.branding,
     });
   }
 
   /**
-   * Generate graphic with custom content_update.
+   * Generate graphic by applying content_update JSON to an existing template.
    */
   async generateGraphic(params: GenerateGraphicParams): Promise<any> {
     return this.request("/render", params.api_key, {
@@ -125,6 +134,23 @@ export class RendererClient {
       content_update: params.content_update,
       branding: params.branding,
     });
+  }
+
+  /**
+   * Render the current saved canvas of a template to PNG/PDF (no content rewrite).
+   * Works for both carousel and single-image designs.
+   */
+  async renderTemplate(params: RenderTemplateParams): Promise<any> {
+    const isCarousel = params.type === "carousel";
+    const endpoint = isCarousel ? "/render?tool=carousel-maker" : "/render";
+    const body: Record<string, unknown> = {
+      template_id: params.template_id,
+      token: params.api_key,
+      profile_id: params.profile_id,
+      output: params.output || "png",
+    };
+    if (isCarousel) body.tool = "carousel-maker";
+    return this.request(endpoint, params.api_key, body);
   }
 
   /**
