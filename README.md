@@ -90,12 +90,13 @@ openclaw mcp set contentdrips "{
 | `get_template_structure` | Inspect a template's editable fields and labels |
 | `create_graphic` | Create a blank design — first step when creating without a template ID |
 | `delete_graphic` | Permanently delete a design |
+| `get_brand_styles` | List saved visual styles + whether Pro model is available. Call before AI Design Agent |
 
 ### Generation Tools
 
 | Tool | What it does |
 |------|-------------|
-| `run_ai_design_agent` | **Preferred** for new designs: design/edit via AI Design Agent → editor link |
+| `run_ai_design_agent` | **Preferred** for new designs: design/edit via AI Design Agent. Pass `style_id` and `model` (basic/pro). |
 | `generate_ai_carousel` | Fill an **existing** carousel template from topic/blog/YouTube/TikTok (needs template ID) |
 | `generate_ai_graphic` | Fill an **existing** graphic template from the same sources (needs template ID) |
 | `generate_carousel` | Fill existing carousel with `carousel_content` JSON (template ID required) |
@@ -148,8 +149,9 @@ You: Create a 3-slide carousel about 5 productivity tips
 Claude:
 1. Asks (if needed): blank + AI Design Agent (recommended) vs fill an existing template?
 2. Calls create_graphic(type="carousel", slides=3, format=...) → template_id
-3. Calls run_ai_design_agent(template_id, prompt=...)
-4. Shares editor link; to export PNG: render_template → check_job_status → export_url(s)
+3. Calls get_brand_styles — asks which style if 2+; asks Basic vs Pro if Pro is available
+4. Calls run_ai_design_agent(template_id, prompt=..., style_id?, model=...)
+5. Shares editor link; to export PNG: render_template → check_job_status → export_url(s)
 ```
 
 ### Fill an Existing Template and Publish

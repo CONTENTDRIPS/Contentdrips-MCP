@@ -177,7 +177,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "ASK: A) AI Design Agent on a NEW blank design, OR B) Choose an existing template (name/ID)?",
         "",
         "### STEP 2A — User chose Design Agent / new blank",
-        "create_graphic → run_ai_design_agent → render_template + check_job_status for PNG.",
+        "create_graphic → BEFORE run_ai_design_agent call get_brand_styles (see Style + model below) →",
+        "run_ai_design_agent → render_template + check_job_status for PNG.",
         "",
         "### STEP 2B — User has or chose a template ID (name/ID)",
         "ALWAYS ask explicitly before proceeding (do not assume):",
@@ -187,9 +188,20 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "  get_template → get_template_structure (REQUIRED before generate_ai_*) →",
         "  carousel type → generate_ai_carousel; graphic/quote → generate_ai_graphic;",
         "  method=topic|blog|youtube|tiktok_reel → check_job_status.",
-        "If they want Design Agent on that template_id: run_ai_design_agent (knowing it overrides) → optional render_template.",
+        "If they want Design Agent on that template_id: get_brand_styles first, then run_ai_design_agent (knowing it overrides) → optional render_template.",
         "Never call run_ai_design_agent for 'new topic/URL on this template' unless they explicitly chose Design Agent after the warning.",
         "Manual/LLM JSON fill (optional third path on a template_id): get_template_structure → generate_carousel(carousel_content) or generate_graphic(content_update) — full control over fields; not AI maker.",
+        "",
+        "### Style + model (REQUIRED before every run_ai_design_agent)",
+        "Call get_brand_styles first (skip only if already fetched this conversation for the same profile).",
+        "Saved styles:",
+        "  - 0 styles → proceed with no style_id.",
+        "  - 1 style → use it (pass style_id) unless the user declined or already named a different look.",
+        "  - 2+ styles → ASK which style to use (list names). Never auto-pick. They may also choose none.",
+        "Model (pro/basic):",
+        "  - If can_use_pro_model is true → ASK Basic vs Pro before generating. Default basic if they do not choose.",
+        "  - If can_use_pro_model is false → use model=basic. Do not mention upgrading unless they asked for Pro.",
+        "Pass the chosen style_id and model into run_ai_design_agent.",
         "",
         "### STEP 3 — Social post (optional)",
         "create_post → set_post_images → schedule/publish ONLY platforms they named.",
@@ -346,7 +358,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
       description:
         "Create a new blank design (graphic, carousel, quote) in the user's ContentDrips account. " +
         "MAIN FLOW path A: only after the user chose AI Design Agent / new blank (always ask Design Agent vs choose template first for create requests). " +
-        "Then usually run_ai_design_agent on the returned template_id. " +
+        "Then usually get_brand_styles (ask style if 2+; ask Pro if available) then run_ai_design_agent on the returned template_id. " +
         "Do NOT substitute an existing template from get_my_templates/search_templates. " +
         "Infer type/format/slides from the request when clear (e.g. 3 slides → type=carousel, slides=3; LinkedIn square → format=square). " +
         "Ask only for missing essentials (name if needed, format if ambiguous). " +
@@ -414,6 +426,71 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     }
   );
 
+  // Tool 2d-styles: List saved brand styles + pro/basic eligibility
+  server.registerTool(
+    "get_brand_styles",
+    {
+      description:
+        "REQUIRED before run_ai_design_agent. Lists the profile's saved visual styles and whether Pro model is available. " +
+        "If 2+ styles: ASK which style to use (or none) — never auto-pick. " +
+        "If exactly 1 style: use it unless the user declined. " +
+        "If 0 styles: proceed with no style. " +
+        "If can_use_pro_model is true: ASK Basic vs Pro (default Basic). " +
+        "Then pass the chosen style_id and model into run_ai_design_agent.",
+      inputSchema: {
+        profile_id: z.string().optional().describe(
+          "Optional profile/workspace ID. Uses the token's default profile if omitted."
+        ),
+      },
+    },
+    async ({ profile_id }) => {
+      try {
+        const result = await laravel.getBrandStyles(apiToken, profile_id);
+        const styles = result.styles || [];
+        const canPro = !!result.can_use_pro_model;
+        const lines: string[] = [];
+
+        if (styles.length === 0) {
+          lines.push("No saved styles on this profile. Proceed with no `style_id`.");
+        } else {
+          lines.push(`Saved styles (**${styles.length}**):`);
+          lines.push("");
+          lines.push("| Name | ID | Mood | Palette |");
+          lines.push("| --- | --- | --- | --- |");
+          for (const s of styles) {
+            const mood = Array.isArray(s.mood) ? s.mood.join(", ") : "—";
+            const palette = Array.isArray(s.palette) ? s.palette.join(", ") : "—";
+            lines.push(
+              `| ${mdCell(s.name || "Untitled")} | \`${s.id}\` | ${mdCell(mood || "—")} | ${mdCell(palette || "—")} |`
+            );
+          }
+          lines.push("");
+          if (styles.length === 1) {
+            lines.push(
+              `Use this style: pass \`style_id="${styles[0].id}"\` unless the user declined.`
+            );
+          } else {
+            lines.push(
+              "ASK which style to use (or none). Never auto-pick. Then pass the chosen `style_id`."
+            );
+          }
+        }
+
+        lines.push("");
+        lines.push("## Model");
+        if (canPro) {
+          lines.push("Pro is available. ASK: **Basic** or **Pro**? Default Basic if they do not choose.");
+        } else {
+          lines.push("Pro is not available on this plan. Use `model=\"basic\"`.");
+        }
+
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      } catch (error: any) {
+        return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
+      }
+    }
+  );
+
   // Tool 2e: AI Design Agent — generate / edit a design with AI
   server.registerTool(
     "run_ai_design_agent",
@@ -425,7 +502,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "When the user already has a template ID and wants new topic/URL/YouTube content, do NOT use this by default — " +
         "ASK explicitly: Design Agent (override design) vs AI carousel/graphic maker (keep layout, fill content). " +
         "Recommend maker for content-fill. Only call this on an existing template after they confirm they want the override. " +
-        "Does not return PNG — use render_template + check_job_status. Share the edit_url.",
+        "REQUIRED first: call get_brand_styles. If 2+ styles, ASK which one (or none). If Pro is available, ASK Basic vs Pro. " +
+        "Then pass style_id and model. Does not return PNG — use render_template + check_job_status. Share the edit_url.",
       inputSchema: {
         template_id: z.string().describe(
           "The template ID to run the AI agent on. Create one first with create_graphic if needed."
@@ -437,19 +515,32 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         use_branding: z.boolean().optional().describe(
           "Include the user's profile branding (name, handle, brand colors, fonts) in the design. Default false."
         ),
+        style_id: z.string().optional().describe(
+          "Saved style ID from get_brand_styles. Required when the user picked a style. Omit for no saved style."
+        ),
+        model: z.enum(["basic", "pro"]).optional().describe(
+          "AI model tier. 'basic' (default) or 'pro' (eligible plans only). Ask first when Pro is available."
+        ),
       },
     },
-    async ({ template_id, prompt, use_branding }) => {
+    async ({ template_id, prompt, use_branding, style_id, model }) => {
       try {
         const result = await laravel.runAIDesignAgent(template_id, apiToken, {
           prompt,
           use_branding,
+          style_id,
+          model,
         });
+
+        const extras = [];
+        if (result.style_id) extras.push(`Style: \`${result.style_id}\``);
+        extras.push(`Model: ${result.model || model || "basic"}`);
 
         const text =
           `AI design complete!\n\n` +
           `**${result.name}** (ID: \`${result.template_id}\`)\n` +
-          `${result.summary}\n\n` +
+          `${result.summary}\n` +
+          extras.join("  |  ") + `\n\n` +
           `**View & edit your design:** ${result.edit_url}\n\n` +
           `To export PNG/PDF of this design, call \`render_template\` with template_id=\`${result.template_id}\` ` +
           `(type=carousel or graphic) and profile_id, then \`check_job_status\` for export_url(s).`;

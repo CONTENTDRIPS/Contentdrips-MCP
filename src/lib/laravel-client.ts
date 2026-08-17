@@ -63,11 +63,20 @@ export class LaravelClient {
     prompt: string;
     use_branding?: boolean;
     conversation_history?: Array<{ role: string; content: string }>;
+    style_id?: string;
+    model?: "basic" | "pro";
   }): Promise<any> {
     return this.request(`/api/mcp/graphics/${templateId}/ai-design`, apiKey, {
       method: "POST",
       body: JSON.stringify(data),
     });
+  }
+
+  async getBrandStyles(apiKey: string, profileId?: string | number): Promise<any> {
+    const params = new URLSearchParams();
+    if (profileId) params.append("profile_id", String(profileId));
+    const qs = params.toString();
+    return this.request(`/api/mcp/brand-styles${qs ? `?${qs}` : ""}`, apiKey);
   }
 
   async createGraphic(apiKey: string, data: {
