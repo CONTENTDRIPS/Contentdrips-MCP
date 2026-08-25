@@ -37,6 +37,19 @@ export default {
       });
     }
 
+    // ── OpenAI ChatGPT plugin domain verification ─────────────────────────────
+    // Must be public (no auth) and return only the exact token as text/plain.
+    // https://developers.openai.com/plugins/deploy/submission#domain-verification
+    if (url.pathname === "/.well-known/openai-apps-challenge") {
+      return new Response("ipscc3gfeu-I9JTCefiKr37ZvX_x43YqAGbGFprR4N0", {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
     // ── RFC 9728 Protected Resource Metadata ──────────────────────────────────
     if (url.pathname === "/.well-known/oauth-protected-resource") {
       return jsonResponse({

@@ -65,6 +65,7 @@ export class LaravelClient {
     conversation_history?: Array<{ role: string; content: string }>;
     style_id?: string;
     model?: "basic" | "pro";
+    reference_image?: string;
   }): Promise<any> {
     return this.request(`/api/mcp/graphics/${templateId}/ai-design`, apiKey, {
       method: "POST",

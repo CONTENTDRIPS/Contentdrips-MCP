@@ -1,61 +1,101 @@
-# ContentDrips MCP Server
+# ContentDrips MCP — Automate Social Media Graphics & Carousels
 
-A Model Context Protocol (MCP) server that lets AI assistants (Claude, Cursor, etc.) generate carousels and graphics, manage posts, and publish to LinkedIn and Instagram directly via ContentDrips.
+[ContentDrips](https://contentdrips.com) MCP lets AI agents **automate social media graphics**, **LinkedIn carousels**, and **Instagram carousels** from chat. Describe the post. The agent designs it, keeps your brand style, and can schedule or publish.
 
-**Production URL:** `https://mcp.contentdrips.com`
+Works with **OpenClaw**, **Grok** (Grok Build / Grok bot), **Claude**, **Cursor**, **ChatGPT**, and any MCP-compatible client.
+
+**MCP URL:** [`https://mcp.contentdrips.com/mcp`](https://mcp.contentdrips.com/mcp)
+
+OpenClaw skill for social media automation · Grok bot for LinkedIn & Instagram · AI Design Agent that designs in your style
 
 ---
 
-## Getting Your Personal MCP URL
+## What you can automate
 
-1. Log in to [ContentDrips](https://contentdrips.com)
-2. Go to **Dashboard → API Settings**
-3. Create a new API token and copy it
-4. Your personal MCP URL is:
+| Use case | What happens |
+|----------|----------------|
+| **Social media carousel automation** | Multi-slide LinkedIn and Instagram carousels from a topic, blog, YouTube, or TikTok URL |
+| **Social media graphics** | Quote cards, ads, infographics, and single-image posts in your brand |
+| **AI Design Agent** | New layouts in **your saved visual style** — typography, colors, spacing. Optional reference image (“recreate this”) |
+| **Social media automation** | Draft, schedule, and publish to **LinkedIn** and **Instagram** without opening the editor |
+| **OpenClaw / Grok skills** | Drop in the [ContentDrips skill](skills/contentdrips/SKILL.md) so the agent already knows the workflows |
+
+You stay in the conversation. The agent uses ContentDrips tools; you get an [editor link](https://app.contentdrips.com) when you want to tweak.
+
+---
+
+## AI Design Agent — designs in your style
+
+The **AI Design Agent** is the default when you do not name a template. It builds a full layout (not just fill-in-the-blanks copy) and applies a **saved brand style** from your ContentDrips workspace.
+
+1. Agent loads your workspaces (`get_profiles`) and saved styles (`get_brand_styles`)
+2. If you have more than one style, it **asks which to use** — it does not auto-pick
+3. You can attach a picture as `reference_image` (“recreate this in my style”)
+4. You get an **Open in editor** link. Export PNG/PDF only if you ask to preview, download, or publish
+
+If you **do** name a template (or paste a template ID), the agent keeps that layout and fills new content (topic / blog / YouTube / TikTok). Design Agent on an existing design only runs if you explicitly ask to override or recreate it.
+
+---
+
+## Examples
+
+Copy these into OpenClaw, Grok, Claude, or Cursor after MCP is connected.
+
+**LinkedIn carousel from a topic**
+```
+Create a 5-slide LinkedIn carousel on "how to price freelance work".
+Use my brand style. Don't publish yet — just give me the editor link.
+```
+
+**Instagram carousel from a blog**
+```
+Turn this blog into an Instagram carousel and keep my template layout:
+https://example.com/10-tips-for-creators
+Template ID 5821. Then draft a caption. Publish to Instagram only after I confirm.
+```
+
+**Social media graphics in your style**
+```
+Design a square quote graphic: "Ship weekly, not perfectly."
+Warm terracotta, serif headline, my branding. Recreate the layout of this image if I attach one.
+```
+
+**YouTube → LinkedIn carousel automation**
+```
+Use my Blue Corporate template. Turn this YouTube into a LinkedIn carousel and schedule it
+for Tuesday 9am New York. LinkedIn only.
+https://youtube.com/watch?v=...
+```
+
+**Grok bot / OpenClaw — full social automation**
+```
+Show my scheduled posts. Create a new carousel from "3 mistakes new managers make",
+attach the slides to a LinkedIn post with a short caption, and ask me before publishing.
+```
+
+**Manual JSON fill** (full control over fields — not the AI maker):
+
+- Carousel payload: [`skills/contentdrips/examples/carousel_content.json`](skills/contentdrips/examples/carousel_content.json)
+- Graphic payload: [`skills/contentdrips/examples/content_update.json`](skills/contentdrips/examples/content_update.json)
+
+---
+
+## OpenClaw skill for social media automation
+
+The skill folder is [`skills/contentdrips/`](skills/contentdrips/). It follows the [Agent Skills](https://agentskills.io/specification) spec, so the **same files** work in OpenClaw, Grok Build, Claude Code, Cursor, and similar agents.
+
+Download [`contentdrips-skill.zip`](contentdrips-skill.zip) or copy the folder:
 
 ```
-https://mcp.contentdrips.com/mcp/YOUR_API_KEY
+contentdrips/
+  SKILL.md
+  examples.md
+  examples/
+    carousel_content.json
+    content_update.json
 ```
-
-The API key is embedded in the URL — you set it once and never need to enter it again.
-
----
-
-## Adding to Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "contentdrips": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://mcp.contentdrips.com/mcp/YOUR_API_KEY"
-      ]
-    }
-  }
-}
-```
-
-Restart Claude Desktop after saving.
-
----
-
-## Adding to Cursor
-
-Go to **Cursor Settings → MCP → Add Server**:
-
-- **Name:** ContentDrips
-- **Type:** SSE
-- **URL:** `https://mcp.contentdrips.com/mcp/YOUR_API_KEY`
-
----
 
 ### OpenClaw
-
-See `skills/contentdrips/SKILL.md` for full setup. Quick version:
 
 ```bash
 export CONTENTDRIPS_API_KEY=your_api_key_here
@@ -65,186 +105,113 @@ openclaw mcp set contentdrips "{
   \"url\": \"https://mcp.contentdrips.com/mcp\",
   \"headers\": { \"Authorization\": \"Bearer $CONTENTDRIPS_API_KEY\" }
 }"
+
+mkdir -p ~/.openclaw/workspace/skills/contentdrips
+cp -r skills/contentdrips/* ~/.openclaw/workspace/skills/contentdrips/
 ```
+
+### Grok (Grok Build / Grok bot)
+
+1. Add the MCP server with the same URL and `Authorization: Bearer` header
+2. Copy the skill to `~/.grok/skills/contentdrips/` or `./.grok/skills/contentdrips/`
+
+That is the setup for **Grok bot social media automation** and **OpenClaw skills for social media automation**: MCP for tools, skill for workflows (Design Agent vs template fill, LinkedIn vs Instagram, no auto-publish).
+
+### Claude Code, Cursor, Codex
+
+Copy `skills/contentdrips/` into that product’s skills directory (for example `.claude/skills/contentdrips/` or `.cursor/skills/contentdrips/`), and register MCP as below.
 
 ---
 
-## Adding to Claude.ai (Web)
+## Connect MCP (API key in a header, not in the URL)
 
-1. Go to **Settings → Integrations → Add Integration**
-2. Enter: `https://mcp.contentdrips.com`
-3. Claude will open a ContentDrips authorization page — paste your API key and click **Connect**
+1. Log in at [app.contentdrips.com](https://app.contentdrips.com)
+2. **Settings → API Tokens** → create a token
+
+**MCP URL:** `https://mcp.contentdrips.com/mcp`  
+**Auth:** `Authorization: Bearer YOUR_API_KEY`
+
+### Claude (claude.ai)
+
+**Settings → Integrations → Add Integration** → `https://mcp.contentdrips.com/mcp` → authorize with your API key.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http contentdrips https://mcp.contentdrips.com/mcp \
+  --header "Authorization: Bearer YOUR_API_KEY_HERE"
+```
+
+### Cursor
+
+**Settings → MCP → Add MCP Server**
+
+- Type: HTTP
+- URL: `https://mcp.contentdrips.com/mcp`
+- Headers: `Authorization: Bearer YOUR_API_KEY_HERE`
+
+Or `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "contentdrips": {
+      "type": "http",
+      "url": "https://mcp.contentdrips.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}
+```
+
+Full client matrix (Claude Desktop, ChatGPT, and others): [`CONTENTDRIPS_MCP_OVERVIEW.md`](CONTENTDRIPS_MCP_OVERVIEW.md).
 
 ---
 
-## Available Tools
+## How creation works
 
-### Template Tools
+| Path | When | Result |
+|------|------|--------|
+| **AI Design Agent** | No template ID/name | New layout in your style → editor link (no auto-export) |
+| **AI carousel / graphic maker** | You named a template | **Keeps** layout; fills topic, blog, YouTube, or TikTok |
+| **Manual JSON** | You want every field | `carousel_content` or `content_update` after `get_template_structure` |
 
-| Tool | What it does |
-|------|-------------|
-| `get_template_categories` | List public template categories (carousel, quote, etc.) |
-| `search_templates` | Search/browse public templates by category or keyword — markdown table with editor links |
-| `get_my_templates` | List your saved templates when you ask to show/pick one |
-| `get_template` | Look up one design by ID or name — details + editor link |
-| `get_template_structure` | Inspect a template's editable fields and labels |
-| `create_graphic` | Create a blank design — first step when creating without a template ID |
-| `delete_graphic` | Permanently delete a design |
-| `get_brand_styles` | List saved visual styles + whether Pro model is available. Call before AI Design Agent |
+Always pass a workspace `profile_id`. Publish **only** to LinkedIn and/or Instagram if you named them — never both by default.
 
-### Generation Tools
-
-| Tool | What it does |
-|------|-------------|
-| `run_ai_design_agent` | **Preferred** for new designs: design/edit via AI Design Agent. Pass `style_id` and `model` (basic/pro). |
-| `generate_ai_carousel` | Fill an **existing** carousel template from topic/blog/YouTube/TikTok (needs template ID) |
-| `generate_ai_graphic` | Fill an **existing** graphic template from the same sources (needs template ID) |
-| `generate_carousel` | Fill existing carousel with `carousel_content` JSON (template ID required) |
-| `generate_graphic` | Fill existing graphic with `content_update` array (template ID required) |
-| `render_template` | Export current design as PNG/PDF by template ID (after Design Agent or any saved design) |
-| `check_job_status` | Get the final `export_url` once rendering is complete |
-
-### Profile & Social Account Tools
-
-| Tool | What it does |
-|------|-------------|
-| `get_profiles` | Get your ContentDrips profiles and default profile_id |
-| `get_social_accounts` | Get connected LinkedIn/Instagram accounts for a profile |
-
-### Post Management Tools
-
-| Tool | What it does |
-|------|-------------|
-| `list_posts` | List posts by status (draft, scheduled, published) |
-| `get_post` | Get details of a specific post |
-| `create_post` | Create a new draft post with caption and optional images |
-| `update_post` | Update post caption or platform settings |
-| `delete_post` | Delete a post |
-
-### Post Image Tools
-
-| Tool | What it does |
-|------|-------------|
-| `set_post_images` | Attach ContentDrips `export_urls` to a post |
-| `upload_images_to_post` | Upload external images (URLs or base64) and attach to a post |
-| `remove_images_from_post` | Remove all images from a post |
-
-### Publishing Tools
-
-| Tool | What it does |
-|------|-------------|
-| `schedule_post` | Schedule for future — pass explicit platform booleans (only platforms the user named) |
-| `unschedule_post` | Move a scheduled post back to drafts |
-| `publish_post` | Publish immediately — explicit platforms only; confirm naming platforms first |
+Connect accounts at [app.contentdrips.com/social-accounts](https://app.contentdrips.com/social-accounts).
 
 ---
 
-## Example Workflows
+## Tools (28)
 
-### Create from Scratch (AI Design Agent — default)
+**Designs:** `get_template_categories`, `search_templates`, `get_my_templates`, `get_template`, `get_template_structure`, `create_graphic`, `delete_graphic`
 
-```
-You: Create a 3-slide carousel about 5 productivity tips
+**AI:** `get_brand_styles`, `run_ai_design_agent`, `generate_ai_carousel`, `generate_ai_graphic`, `generate_carousel`, `generate_graphic`, `render_template`, `check_job_status`
 
-Claude:
-1. Asks (if needed): blank + AI Design Agent (recommended) vs fill an existing template?
-2. Calls create_graphic(type="carousel", slides=3, format=...) → template_id
-3. Calls get_brand_styles — asks which style if 2+; asks Basic vs Pro if Pro is available
-4. Calls run_ai_design_agent(template_id, prompt=..., style_id?, model=...)
-5. Shares editor link; to export PNG: render_template → check_job_status → export_url(s)
-```
+**Workspaces & social:** `get_profiles`, `get_social_accounts`
 
-### Fill an Existing Template and Publish
-
-```
-You: Use template 5821, create a LinkedIn carousel about 5 productivity tips and publish it
-
-Claude:
-1. Calls generate_ai_carousel with template_id=5821
-2. Polls check_job_status → gets export_urls
-3. Calls get_social_accounts to verify LinkedIn is connected
-4. Calls create_post with caption and export_urls
-5. Calls publish_post with linkedin_publish=true, instagram_publish=false (after confirmation naming LinkedIn)
-```
-
-### Schedule a Post for Later
-
-```
-You: Create a square quote graphic about email marketing and schedule it for tomorrow at 9am
-
-Claude:
-1. Calls create_graphic(type="graphic", format="square") → run_ai_design_agent
-2. Calls render_template → check_job_status → export_urls
-3. Calls create_post / schedule_post with images
-```
-
-### Export PNG of an existing design
-
-```
-You: Export template 163500 as PNG
-
-Claude:
-1. get_template / know type → carousel or graphic
-2. render_template(template_id, profile_id, type, output="png")
-3. check_job_status → export_url(s)
-```
-
-### Quick Publish from YouTube (with template)
-
-```
-You: Use my Blue Corporate template — turn this YouTube into a carousel and post to LinkedIn
-     https://youtube.com/watch?v=...
-
-Claude:
-1. Resolves template ID (user named it or gave an ID)
-2. Calls generate_ai_carousel with method="youtube"
-3. Polls check_job_status → create_post → publish_post(linkedin_publish=true, instagram_publish=false) after confirmation
-```
+**Posts:** `list_posts`, `get_post`, `create_post`, `update_post`, `delete_post`, `set_post_images`, `upload_images_to_post`, `remove_images_from_post`, `schedule_post`, `unschedule_post`, `publish_post`
 
 ---
 
-## Social Account Requirements
-
-Before scheduling or publishing, you must have connected social accounts:
-
-- **LinkedIn**: Connect at [app.contentdrips.com/social-accounts](https://app.contentdrips.com/social-accounts)
-- **Instagram**: Connect your Instagram Business or Creator account
-
-The MCP will check this automatically and provide the connect URL if needed.
-
----
-
-## AI Credits Cost
+## AI credits (maker tools)
 
 | Method | Carousel | Graphic |
 |--------|----------|---------|
-| topic | 10 credits | 8 credits |
-| blog | 12 credits | 10 credits |
-| youtube | 12 credits | 10 credits |
-| tiktok_reel | 12 credits | 10 credits |
+| topic | 10 | 8 |
+| blog / YouTube / TikTok reel | 12 | 10 |
 
 ---
 
-## Local Development
+## Local development
 
 ```bash
-# Install dependencies
 npm install
-
-# Create local env file
-cp .dev.vars.example .dev.vars
-# Edit .dev.vars with your local URLs
-
-# Start local server (runs on http://localhost:8787)
-npm run dev
-
-# Test with MCP Inspector (in a second terminal)
-npx @modelcontextprotocol/inspector@latest
-# Open http://localhost:5173
-# Enter: http://localhost:8787/mcp/YOUR_API_KEY
+cp .dev.vars.example .dev.vars   # point at local Laravel + renderer
+npm run dev                      # http://localhost:8787
 ```
-
-## Deploy
 
 ```bash
 npm run deploy
@@ -252,7 +219,11 @@ npm run deploy
 
 ---
 
-## Support
+## Links
 
-- Docs: [contentdrips.com/docs](https://contentdrips.com/docs)
-- Email: support@contentdrips.com
+- Product: [contentdrips.com](https://contentdrips.com) — social media carousel maker and graphic automation
+- App: [app.contentdrips.com](https://app.contentdrips.com)
+- Skill: [`skills/contentdrips/SKILL.md`](skills/contentdrips/SKILL.md)
+- Marketing / setup overview: [`CONTENTDRIPS_MCP_OVERVIEW.md`](CONTENTDRIPS_MCP_OVERVIEW.md)
+- API: [developer.contentdrips.com](https://developer.contentdrips.com)
+- Support: support@contentdrips.com
