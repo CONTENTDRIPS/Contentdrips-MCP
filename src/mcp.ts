@@ -241,6 +241,17 @@ const jobStatusOutput = {
   export_url: z.string().optional(),
   export_urls: z.array(z.string()).optional(),
   message: z.string().optional(),
+  saved: z.boolean().optional(),
+  template_id: z.string().optional(),
+  edit_url: z.string().optional(),
+};
+
+const editTemplateOutput = {
+  job_id: z.string().optional(),
+  status: z.string().optional(),
+  message: z.string().optional(),
+  template_id: z.string().optional(),
+  edit_url: z.string().optional(),
 };
 
 const brandStylesOutput = {
@@ -376,6 +387,9 @@ function summarizeJob(result: any) {
     message: result?.message != null ? String(result.message) : undefined,
     export_url: result?.export_url != null ? String(result.export_url) : undefined,
     export_urls: Array.isArray(result?.export_urls) ? result.export_urls.map(String) : undefined,
+    saved: result?.saved === true ? true : undefined,
+    template_id: result?.template_id != null ? String(result.template_id) : undefined,
+    edit_url: result?.edit_url != null ? String(result.edit_url) : undefined,
   };
 }
 
@@ -399,12 +413,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "- No ID/name → AI Design Agent on a new blank. Do not ask Design Agent vs template unless they are ambiguous.",
         "- Exception: they explicitly say override/recreate an existing canvas with Design Agent (or attach a reference image to recreate in their style) → Design Agent, even if a template was named.",
         "",
-        "## Two tools",
+        "## Three tools",
         "- run_ai_design_agent: NEW layout. Use when no existing template is named, or they want a reference image recreated in their style.",
         "- generate_ai_carousel / generate_ai_graphic: KEEPS existing layout; fills topic/URL. Requires resolved template_id + profile_id. Starts a render job.",
+        "- edit_template: SURGICAL edit + SAVE. Font size, color, image URL, text tweak on a named template. Does NOT redesign.",
         "",
         "### STEP 0 — Workspace (required)",
-        "Call get_profiles before create_graphic, create_post, generate_*, render_template, schedule_post, or publish_post.",
+        "Call get_profiles before create_graphic, create_post, generate_*, edit_template, render_template, schedule_post, or publish_post.",
         "1 profile → use that profile_id. 2+ → ASK which workspace, then pass that profile_id. Never omit profile_id.",
         "",
         "### No template ID/name — Design Agent",
@@ -414,7 +429,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "### Has template ID or name — AI maker",
         "get_template (by id or name) → get_template_structure → carousel type → generate_ai_carousel; graphic/quote/infographic → generate_ai_graphic. Pass profile_id. Then check_job_status.",
         "Only use run_ai_design_agent on that template if they explicitly asked to override/recreate the layout (or recreate from a reference image).",
-        "Manual JSON: get_template_structure → generate_carousel or generate_graphic.",
+        "Style/image/color/text tweak on a named template (make headings bigger, change this image, this color) → get_template_structure → edit_template. That SAVES the design. Do NOT use Design Agent for small edits.",
+        "Manual JSON fill (no save): get_template_structure → generate_carousel or generate_graphic.",
         "",
         "### Style + model (REQUIRED before every run_ai_design_agent)",
         "Call get_brand_styles with the same profile_id.",
@@ -431,8 +447,12 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "### Browse tools",
         "get_my_templates / search_templates only when they ask to show/find/pick. Never silent auto-pick.",
         "",
+        "### Edit existing design (save)",
+        "Named template + 'make headings bigger' / change color / change image URL / tweak text → get_template_structure (has current fontSize/fontColor) → edit_template with content_update patches. value is optional for style-only. Relative size: a bit ≈ current * 1.15. Match heading/headline/title labels. Then share edit_url; do NOT auto-render.",
+        "",
         "### Export PNG/PDF",
         "render_template is OPTIONAL. Use only when they ask to preview, download, attach images, or publish. Export is available — do not say it is not.",
+        "Do not auto-render after edit_template — share the editor link first.",
         "",
         "### Platforms",
         "ONLY platforms they named. Instagram only → instagram_publish=true, linkedin_publish=false. LinkedIn only → opposite. Always pass both booleans.",
@@ -877,8 +897,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     "get_template_structure",
     {
       description:
-        "REQUIRED before generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic. " +
-        "Inspects editable field labels/types so you can build carousel_content or content_update correctly. " +
+        "REQUIRED before generate_ai_carousel, generate_ai_graphic, generate_carousel, generate_graphic, or edit_template. " +
+        "Inspects editable field labels/types and current fontSize/fontColor so you can build carousel_content, content_update, or surgical edit patches. " +
+        "For style edits: get_template → get_template_structure → edit_template. " +
         "For manual JSON fill: get_template → get_template_structure → generate_carousel (carousel_content) or generate_graphic (content_update).",
       inputSchema: {
         template_id: z.string().describe("The template ID to inspect"),
@@ -1066,6 +1087,89 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     }
   );
 
+  // Tool 7a: Surgical edit + save (does not redesign)
+  server.registerTool(
+    "edit_template",
+    {
+      description:
+        "Surgically edit an EXISTING template/design/graphic/carousel and SAVE it. " +
+        "Use for 'make headings a bit bigger', 'change this image URL', 'change text color to #…', or small text tweaks. " +
+        "KEEPS every object — does NOT redesign. Do NOT use run_ai_design_agent for these edits. " +
+        "REQUIRED: get_profiles then get_template_structure. Build content_update from exact labels. " +
+        "value is optional for style-only patches (fontSize, fontColor, fill, opacity). " +
+        "Relative size: 'a bit bigger' ≈ current fontSize * 1.15. " +
+        "Optional slide (0-based, or 'intro'/'ending') targets one carousel slide; omit to change all matching labels. " +
+        "Starts a job that saves the canvas. Share edit_url when done. Do NOT auto-render unless they ask to preview.",
+      inputSchema: {
+        template_id: z.string().describe("Required. Existing template/design ID — do not invent or auto-pick."),
+        profile_id: z.string().describe("REQUIRED. Workspace/profile ID from get_profiles. Same profile as the template."),
+        content_update: z.array(z.any()).optional().describe(
+          "Labeled patches. value is optional. Examples: " +
+          "[{ type: 'textbox', label: 'headline', fontSize: '56' }], " +
+          "[{ type: 'textbox', label: 'headline', fontColor: '#1A1A1A' }], " +
+          "[{ type: 'image', label: 'background', value: 'https://example.com/new.jpg' }], " +
+          "[{ type: 'textbox', label: 'heading', fontSize: '64', slide: 0 }]"
+        ),
+        carousel_content: z.any().optional().describe(
+          "Optional carousel patches (flattened and saved in place — does not add/remove slides). " +
+          "Prefer content_update. Same shape as generate_carousel but only include fields you want to change."
+        ),
+        canvas_background: z.any().optional().describe(
+          "Optional solid background: { type: 'fill', color: '#0F172A' }"
+        ),
+      },
+      outputSchema: editTemplateOutput,
+      annotations: WRITE_CLOSED,
+    },
+    async ({ template_id, profile_id, content_update, carousel_content, canvas_background }) => {
+      try {
+        if (
+          (!content_update || content_update.length === 0) &&
+          !carousel_content &&
+          !canvas_background
+        ) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "Error: pass content_update, carousel_content, or canvas_background. Call get_template_structure first.",
+            }],
+            isError: true,
+          };
+        }
+
+        const result = await renderer.editTemplate({
+          template_id,
+          profile_id,
+          content_update,
+          carousel_content,
+          canvas_background,
+          api_key: apiToken,
+        });
+
+        const editUrl = templateEditUrl(template_id);
+        const text =
+          `Edit job queued for template \`${template_id}\`.\n\n` +
+          `Job: \`${result.job_id || result.jobId || ""}\`\n` +
+          `This SAVES the design (font/color/image/text patches).\n\n` +
+          `Poll with check_job_status. When complete, share: ${editUrl}\n` +
+          `Do not render unless the user asks to preview or download.`;
+
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: {
+            job_id: result.job_id != null ? String(result.job_id) : undefined,
+            status: result.status != null ? String(result.status) : undefined,
+            message: result.message != null ? String(result.message) : undefined,
+            template_id,
+            edit_url: editUrl,
+          },
+        };
+      } catch (error: any) {
+        return { content: [{ type: "text" as const, text: `Error: ${error.message}` }], isError: true };
+      }
+    }
+  );
+
   // Tool 7b: Render current template canvas to PNG/PDF (no content rewrite)
   server.registerTool(
     "render_template",
@@ -1073,7 +1177,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
       description:
         "Export PNG/PDF of an already-saved design (render job → export_url). Does NOT rewrite content. " +
         "ONLY call this when the user asks to preview, download, export, attach images to a post, or publish/schedule. " +
-        "Do NOT call automatically after run_ai_design_agent or create_graphic — those are done when you share the editor link. " +
+        "Do NOT call automatically after run_ai_design_agent, create_graphic, or edit_template — those are done when you share the editor link. " +
         "REQUIRED: pass profile_id from get_profiles (same workspace as the design). " +
         "Set type to 'carousel' or 'graphic'. Then check_job_status for export_url(s).",
       inputSchema: {
@@ -1108,7 +1212,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Poll a render job and get export_url(s) (PNG/PDF download links) when complete. " +
-        "Use after render_template, generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic.",
+        "Use after render_template, generate_ai_carousel, generate_ai_graphic, generate_carousel, generate_graphic, or edit_template.",
       inputSchema: {
         job_id: z.string().describe("Job ID returned from render_template or any generate tool"),
       },
@@ -1137,7 +1241,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       description:
         "Get the user's ContentDrips workspaces (profiles). " +
-        "REQUIRED before create_graphic, create_post, generate_ai_*, render_template, schedule_post, or publish_post. " +
+        "REQUIRED before create_graphic, create_post, generate_ai_*, edit_template, render_template, schedule_post, or publish_post. " +
         "If 2+ profiles: ASK which workspace to use — never guess. If 1: use that profile_id. " +
         "Always pass the chosen profile_id into later tools. Posts and scheduling fail without it.",
       inputSchema: {

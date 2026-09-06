@@ -3,9 +3,11 @@ name: contentdrips
 description: >-
   Connect OpenClaw to ContentDrips MCP for social media design and publishing.
   MAIN FLOW: ask AI Design Agent (new blank, or override on a template) vs AI
-  carousel/graphic maker (template ID + keep layout, fill topic/URL). Always
-  get_template_structure before generate_ai_*. Platforms explicit. Use when
-  creating designs, posts, or publishing to LinkedIn/Instagram.
+  carousel/graphic maker (template ID + keep layout, fill topic/URL) vs
+  edit_template (named template + font/color/image/text tweak, then SAVE).
+  Always get_template_structure before generate_ai_* or edit_template.
+  Platforms explicit. Use when creating designs, posts, or publishing to
+  LinkedIn/Instagram.
 ---
 
 # ContentDrips MCP Skill
@@ -75,16 +77,17 @@ Always share these links with the user after creating a design or post.
 
 ## Agent rules
 
-1. **Workspaces first (always)** — call `get_profiles` before `create_graphic`, `create_post`, `generate_*`, `render_template`, schedule, or publish. If 2+ workspaces, ASK which. Always pass `profile_id`. Never tell the user you lack a profile_id — fetch it.
+1. **Workspaces first (always)** — call `get_profiles` before `create_graphic`, `create_post`, `generate_*`, `edit_template`, `render_template`, schedule, or publish. If 2+ workspaces, ASK which. Always pass `profile_id`. Never tell the user you lack a profile_id — fetch it.
 2. **MAIN FLOW — route by whether they named a template** (template = design = graphic = carousel = infographic):
    - **No ID or name:** AI Design Agent. `get_profiles` → `create_graphic(profile_id)` → `get_brand_styles` (if 2+ ASK which) → `run_ai_design_agent` (pass `reference_image` if they uploaded a picture) → **share the editor link and STOP**.
-   - **Has ID or name:** AI maker (keep layout). `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic` → `check_job_status`.
+   - **Has ID or name + new topic/URL:** AI maker (keep layout). `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic` → `check_job_status`.
+   - **Has ID or name + style/image/color/text tweak** ("make headings bigger", "change this image", "this color"): `get_template` → `get_template_structure` → `edit_template` (SAVES). Do **not** use Design Agent.
    - Use Design Agent on an existing template only if they explicitly ask to override/recreate the layout (or recreate from a reference image).
 3. **Confirm before publish — platforms matter** — confirm **naming platforms** (e.g. "Publish to LinkedIn only?" / "Publish to Instagram only?"). Set explicit booleans for **only** platforms they named — never add LinkedIn when they asked for Instagram, or Instagram when they asked for LinkedIn.
 4. **Confirm before delete** — ask before `delete_graphic` or `delete_post`.
 5. **Design synonyms** — "designs", "graphics", "creatives", "templates", "infographics", and "carousels" all map to ContentDrips templates.
 6. **Platforms — LinkedIn and Instagram equally** — only schedule/publish to platforms the user explicitly named. LinkedIn-only → `linkedin_publish=true`, `instagram_publish=false`. Instagram-only → opposite. Ask if unclear.
-7. **Do not auto-export** — after Design Agent, share `edit_url` only. Call `render_template` → `check_job_status` **only** if they ask to preview, download PNG/PDF, attach to a post, or publish. Never say export is unavailable.
+7. **Do not auto-export** — after Design Agent or `edit_template`, share `edit_url` only. Call `render_template` → `check_job_status` **only** if they ask to preview, download PNG/PDF, attach to a post, or publish. Never say export is unavailable.
 8. **Style + model before Design Agent** — call `get_brand_styles` before every `run_ai_design_agent`. If 2+ saved styles, ASK which to use (or none) — never auto-pick. If exactly 1, use it unless they declined. If Pro is available (`can_use_pro_model`), ASK Basic vs Pro (default Basic). Pass `style_id` and `model`.
 9. **Reference images (ChatGPT)** — if the user uploads an image (“recreate this”, “use this as reference”), pass it to `run_ai_design_agent` as `reference_image` (https URL preferred, or data URI). Claude typically cannot pass chat images to MCP.
 10. **Post images — two paths only:**
@@ -97,7 +100,7 @@ Always share these links with the user after creating a design or post.
 
 ---
 
-## Tools (28)
+## Tools (29)
 
 ### Templates & designs
 
@@ -107,7 +110,7 @@ Always share these links with the user after creating a design or post.
 | `search_templates` | Browse/search public templates by `category` and/or `query` keyword |
 | `get_my_templates` | List user's designs when they ask to show/pick; never auto-pick for creation |
 | `get_template` | Look up one design by ID or name (markdown details + editor link) |
-| `get_template_structure` | **Required** before AI maker or manual JSON fill (`generate_carousel` / `generate_graphic`) |
+| `get_template_structure` | **Required** before AI maker, manual JSON fill, or `edit_template` (includes current fontSize/fontColor) |
 | `create_graphic` | New blank design — first step when creating without a template ID |
 | `delete_graphic` | Permanently delete a design |
 
@@ -132,8 +135,9 @@ For `custom`, always pass `format: "custom"` plus both `width` and `height`. Car
 | `generate_ai_carousel` | Template ID + new topic/URL — keep carousel layout (after `get_template_structure`) |
 | `generate_ai_graphic` | Template ID + new topic/URL — keep graphic layout (after `get_template_structure`) |
 | `generate_carousel` | Template ID + manual/LLM `carousel_content` JSON (after `get_template_structure`) |
-| `generate_graphic` | Template ID + manual/LLM `content_update` array (after `get_template_structure`) |
-| `render_template` | Export current design as PNG/PDF by `template_id` (after Design Agent or any saved design) |
+| `generate_graphic` | Template ID + manual/LLM `content_update` array (after `get_template_structure`) — export only, does not save |
+| `edit_template` | Surgical edit + **save**: fontSize, fontColor, image URL, text. `value` optional for style-only. After `get_template_structure` |
+| `render_template` | Export current design as PNG/PDF by `template_id` (after Design Agent, edit_template, or any saved design) |
 | `check_job_status` | Poll render job → get `export_url`(s) |
 
 ### Workspaces & social
@@ -207,10 +211,15 @@ check_job_status → export_url(s)
 ── Path B Design Agent (only if they explicitly asked to override/recreate) ──
 get_brand_styles → run_ai_design_agent(template_id, style_id?, model, reference_image?) → share edit_url
 
-── Path B manual JSON (full control) ──
+── Path B manual JSON (full control, export only) ──
 get_template → get_template_structure
 generate_carousel(carousel_content) OR generate_graphic(content_update)
 check_job_status
+
+── Path C edit + save (named template, keep layout) ──
+get_template → get_template_structure
+edit_template(content_update patches; value optional for style-only)
+check_job_status → share edit_url (STOP)
 ```
 
 ### C. Manual JSON fill (`carousel_content` / `content_update`)
@@ -250,6 +259,9 @@ Ask: "Publish to LinkedIn only?" / "Publish to Instagram only?" — name platfor
 - "Use template 5821 + this YouTube" → ask override vs maker → recommend maker → structure → `generate_ai_carousel`
 - "Publish that post to LinkedIn only" → `linkedin_publish=true`, `instagram_publish=false`
 - "Publish that post to Instagram only" → `linkedin_publish=false`, `instagram_publish=true`
+- "Make the headings a bit bigger on template 5821" → structure → `edit_template` with fontSize ≈ current * 1.15
+- "Change the hero image on this design to https://…" → structure → `edit_template` image patch
+- "Make the headline text #1A1A1A" → structure → `edit_template` fontColor patch
 - "Show me my designs" / "Show me carousel templates"
 - "Get details of template 149900"
 

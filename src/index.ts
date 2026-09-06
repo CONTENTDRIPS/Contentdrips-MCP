@@ -1,14 +1,14 @@
 import { createContentDripsMcpHandler } from "./mcp";
 import {
+  buildAuthorizeRedirect,
   buildDiscoveryResponse,
   buildTokenResponse,
-  renderAuthorizePage,
-  validateApiKey,
 } from "./auth";
 
 export interface Env {
   LARAVEL_API_URL: string;
   RENDERER_API_URL: string;
+  APP_URL: string;
 }
 
 export default {
@@ -87,42 +87,10 @@ export default {
       );
     }
 
-    // ── Authorization — GET (show form) ───────────────────────────────────────
+    // ── Authorization — GET (redirect to Vue consent page) ────────────────────
     if (url.pathname === "/authorize" && request.method === "GET") {
-      return renderAuthorizePage({
-        redirectUri: url.searchParams.get("redirect_uri") || "",
-        state: url.searchParams.get("state") || "",
-        codeChallenge: url.searchParams.get("code_challenge") || "",
-        codeChallengeMethod: url.searchParams.get("code_challenge_method") || "",
-      });
-    }
-
-    // ── Authorization — POST (form submit) ────────────────────────────────────
-    if (url.pathname === "/authorize" && request.method === "POST") {
-      const formData = await request.formData();
-      const apiKey = ((formData.get("api_key") as string) || "").trim();
-      const redirectUri = ((formData.get("redirect_uri") as string) || "").trim();
-      const state = ((formData.get("state") as string) || "").trim();
-      const codeChallenge = ((formData.get("code_challenge") as string) || "").trim();
-      const codeChallengeMethod = ((formData.get("code_challenge_method") as string) || "").trim();
-
-      if (!apiKey) {
-        return renderAuthorizePage({ redirectUri, state, codeChallenge, codeChallengeMethod, error: "Please enter your ContentDrips API key." });
-      }
-
-      const { valid, message } = await validateApiKey(apiKey, env.LARAVEL_API_URL);
-      if (!valid) {
-        return renderAuthorizePage({
-          redirectUri, state, codeChallenge, codeChallengeMethod,
-          error: message || "Invalid API key. Please check and try again.",
-        });
-      }
-
-      // Use the API key as the auth code directly — no storage needed
-      const redirect = new URL(redirectUri);
-      redirect.searchParams.set("code", apiKey);
-      if (state) redirect.searchParams.set("state", state);
-      return Response.redirect(redirect.toString(), 302);
+      const appUrl = env.APP_URL || "https://app.contentdrips.com";
+      return buildAuthorizeRedirect(appUrl, url.searchParams);
     }
 
     // ── Token exchange ────────────────────────────────────────────────────────

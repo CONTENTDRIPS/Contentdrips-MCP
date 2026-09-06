@@ -48,6 +48,17 @@ interface RenderTemplateParams {
   type?: "carousel" | "graphic";
 }
 
+interface EditTemplateParams {
+  template_id: string;
+  profile_id: string;
+  api_key: string;
+  content_update?: any[];
+  carousel_content?: any;
+  branding?: any;
+  canvas_background?: { type: string; color?: string };
+  output?: "png" | "pdf";
+}
+
 export class RendererClient {
   private baseUrl: string;
 
@@ -133,6 +144,24 @@ export class RendererClient {
       output: params.output || "png",
       content_update: params.content_update,
       branding: params.branding,
+    });
+  }
+
+  /**
+   * Apply surgical patches to an existing template and persist via Laravel UpdateCarousel.
+   * Does not use carousel-maker (no slide add/remove). Existing generate_* tools are unchanged.
+   */
+  async editTemplate(params: EditTemplateParams): Promise<any> {
+    return this.request("/render", params.api_key, {
+      template_id: params.template_id,
+      token: params.api_key,
+      profile_id: params.profile_id,
+      output: params.output || "png",
+      content_update: params.content_update,
+      carousel_content: params.carousel_content,
+      branding: params.branding,
+      canvas_background: params.canvas_background,
+      save: true,
     });
   }
 

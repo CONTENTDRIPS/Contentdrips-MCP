@@ -14,8 +14,10 @@ deleted_classes = ["ContentDripsMCP"]
 [vars]
 LARAVEL_API_URL = "https://api.contentdrips.com"
 RENDERER_API_URL = "https://generate.contentdrips.com"
+APP_URL = "https://app.contentdrips.com"
 
 # For local development, override these in .dev.vars:
 # LARAVEL_API_URL = "http://localhost:8000"
 # RENDERER_API_URL = "http://localhost:3000"
+# APP_URL = "http://localhost:3000"
 
