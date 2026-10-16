@@ -23,7 +23,8 @@ Call `get_profiles` first. If there are two or more workspaces, ask which. Pass 
 | User intent | Skill / path |
 |---|---|
 | New design, no template named | [create-design](../create-design/SKILL.md) |
-| Named template + topic, blog, YouTube, or TikTok URL | [fill-from-source](../fill-from-source/SKILL.md) |
+| Named template + their own slide or graphic text | [fill-from-source](../fill-from-source/SKILL.md) — show the text and wait for yes, then `generate_carousel` or `generate_graphic` |
+| Named template + topic, blog, YouTube, or TikTok URL | [fill-from-source](../fill-from-source/SKILL.md) — `generate_ai_carousel` or `generate_ai_graphic` |
 | Caption, schedule, or publish | [publish-and-schedule](../publish-and-schedule/SKILL.md) |
 | Small tweak on a named design (font, color, image, text) | `get_template_structure` → `edit_template` → share `edit_url` |
 

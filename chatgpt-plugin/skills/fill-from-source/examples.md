@@ -1,6 +1,8 @@
 # Manual JSON examples
 
-Use these **only** for Path B manual fill: `get_template` → `get_template_structure` → `generate_carousel` / `generate_graphic` → `check_job_status`.
+Use these **only** when the user already wrote the slide or graphic text: `get_template` → `get_template_structure` → show that text and wait for a yes → `generate_carousel` / `generate_graphic` → `check_job_status`.
+
+Copy each `value` as the user wrote it. Do not call `generate_ai_carousel` or `generate_ai_graphic` for this path.
 
 Element keys and graphic `label`s must match `get_template_structure` exactly. Drop fields the template does not have; add fields it does.
 

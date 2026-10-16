@@ -467,20 +467,22 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       instructions: [
         // ChatGPT weights the first ~512 chars — keep hard rules here.
-        "CRITICAL: template = design = graphic = carousel = infographic (same thing). If the user gives a template/design ID or NAME → AI maker (keep layout): get_template then generate_ai_carousel or generate_ai_graphic. If they give NO id/name → AI Design Agent: get_profiles → create_graphic(profile_id) → get_brand_styles (if 2+ styles ASK which) → run_ai_design_agent. After Design Agent share edit_url only — do NOT render unless they ask to preview/download/publish. ALWAYS pass profile_id. ChatGPT: if the user uploaded an image, pass it as reference_image on run_ai_design_agent.",
+        "CRITICAL: User wrote the slide or graphic text → generate_carousel or generate_graphic. Copy each value verbatim. SHOW that text and WAIT for yes before calling them. Never generate_ai_* for written copy. Topic, blog, YouTube, or TikTok (AI writes) on a named template → generate_ai_carousel or generate_ai_graphic. No template id/name → Design Agent: get_profiles → create_graphic(profile_id) → get_brand_styles (2+ ASK) → run_ai_design_agent, then edit_url only. ALWAYS pass profile_id.",
         "Editor: https://app.contentdrips.com/canvas?template={id}",
-        "No inline image previews. Do not auto-render to 'show' the design.",
+        "No inline image previews. Do not auto-render to 'show' the design. ChatGPT: if the user uploaded an image, pass it as reference_image on run_ai_design_agent.",
         "",
-        "## Route by whether they named a template",
+        "## Route by copy, not only by template name",
         "Words 'template', 'design', 'graphic', 'carousel', 'infographic', 'creative' all mean a ContentDrips canvas.",
-        "- Named ID or name (e.g. 'use template 5821', 'use my LinkedIn carousel') → AI maker. Resolve with get_template if name only.",
+        "- Named ID or name AND the user already wrote the slide or graphic text → exact fill. Resolve with get_template if name only. Do NOT call generate_ai_*.",
+        "- Named ID or name AND a topic, blog, YouTube, or TikTok URL (or they asked the AI to write the slides) → generate_ai_carousel or generate_ai_graphic.",
         "- No ID/name → AI Design Agent on a new blank. Do not ask Design Agent vs template unless they are ambiguous.",
         "- Exception: they explicitly say override/recreate an existing canvas with Design Agent (or attach a reference image to recreate in their style) → Design Agent, even if a template was named.",
         "",
-        "## Three tools",
+        "## Which fill tool",
+        "- generate_carousel / generate_graphic: user-supplied words, copied character-for-character. Carousel → generate_carousel. Single graphic → generate_graphic. SHOW the mapped text and WAIT for yes before calling.",
+        "- generate_ai_carousel / generate_ai_graphic: AI writes the copy from a topic or URL. KEEPS layout. Do NOT use when the text is already written.",
         "- run_ai_design_agent: NEW layout. Use when no existing template is named, or they want a reference image recreated in their style.",
-        "- generate_ai_carousel / generate_ai_graphic: KEEPS existing layout; fills topic/URL. Requires resolved template_id + profile_id. Starts a render job.",
-        "- edit_template: SURGICAL edit + SAVE. Font size, color, image URL, text tweak on a named template. Does NOT redesign.",
+        "- edit_template: SURGICAL edit + SAVE. Font size, color, image URL, or a one-line tweak. Does NOT redesign and does NOT replace a full script.",
         "",
         "### STEP 0 — Workspace (required)",
         "Call get_profiles before create_graphic, create_post, generate_*, edit_template, render_template, schedule_post, or publish_post.",
@@ -490,11 +492,11 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "get_profiles → create_graphic(profile_id) → get_brand_styles → if 2+ styles ASK which (or none); if 1 use it unless declined → run_ai_design_agent (pass reference_image if they uploaded one) → STOP and share edit_url.",
         "Do NOT render. Preview/download later → render_template + check_job_status with the same profile_id.",
         "",
-        "### Has template ID or name — AI maker",
-        "get_template (by id or name) → get_template_structure → carousel type → generate_ai_carousel; graphic/quote/infographic → generate_ai_graphic. Pass profile_id. Then check_job_status.",
+        "### Has template ID or name — exact copy OR AI copy",
+        "User already wrote each slide or the full graphic text: get_template → get_template_structure → map their sentences onto labels with no rewording → SHOW that text (slide by slide, or label by label) → WAIT for yes → generate_carousel (carousel_content) or generate_graphic (content_update). Pass the confirmed text only. If they correct a line, show the update and ask again.",
+        "Topic, blog, YouTube, or TikTok, or they asked the AI to write the slides: get_template → get_template_structure → generate_ai_carousel or generate_ai_graphic. Pass profile_id. Then check_job_status. These tools rewrite copy.",
         "Only use run_ai_design_agent on that template if they explicitly asked to override/recreate the layout (or recreate from a reference image).",
-        "Style/image/color/text tweak on a named template (make headings bigger, change this image, this color) → get_template_structure → edit_template. That SAVES the design. Do NOT use Design Agent for small edits.",
-        "Manual JSON fill (no save): get_template_structure → generate_carousel or generate_graphic.",
+        "Style/image/color tweak on a named template (make headings bigger, change this image, this color) → get_template_structure → edit_template. That SAVES the design. Do NOT use Design Agent for small edits.",
         "",
         "### Style + model (REQUIRED before every run_ai_design_agent)",
         "Call get_brand_styles with the same profile_id.",
@@ -651,7 +653,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
       title: "Get template details",
       description:
         "Look up a single template/design/graphic/carousel by ID or name. " +
-        "REQUIRED before AI maker when the user named a design but you only have a name (or need to confirm ID). " +
+        "REQUIRED before filling a named design when you only have a name (or need to confirm the ID). " +
+        "If the user already wrote the slide or graphic text, the next tools are generate_carousel or generate_graphic, not generate_ai_*. " +
         "Returns details and an Open in editor link. Searches the user's designs first, then public templates.",
       inputSchema: {
         template_id: z.string().optional().describe("Numeric template ID (e.g. '163191')"),
@@ -892,7 +895,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "AI Design Agent — builds a NEW layout with AI. " +
         "Use when the user did NOT name an existing template/design (ID or name), or they uploaded a reference image to recreate in their style. " +
         "Call create_graphic first (with profile_id). " +
-        "If they DID name an existing template, use generate_ai_carousel/generate_ai_graphic instead unless they explicitly asked to override/recreate the layout. " +
+        "If they DID name an existing template and already wrote the slide or graphic text, use generate_carousel or generate_graphic (show the text and wait for yes). " +
+        "If they named a template and gave a topic or URL, use generate_ai_carousel or generate_ai_graphic. " +
+        "Use this tool on a named template only when they explicitly asked to override/recreate the layout. " +
         "REQUIRED: get_profiles then get_brand_styles. If 2+ styles, ASK which (or none) — never auto-pick. If Pro available, ASK Basic vs Pro. " +
         "If the user uploaded an image in ChatGPT, pass it as reference_image (https URL preferred, or data URI). " +
         "Overwrites the canvas on that template_id (hard to undo). " +
@@ -975,7 +980,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "REQUIRED before generate_ai_carousel, generate_ai_graphic, generate_carousel, generate_graphic, or edit_template. " +
         "Inspects editable field labels/types and current fontSize/fontColor so you can build carousel_content, content_update, or surgical edit patches. " +
         "For style edits: get_template → get_template_structure → edit_template. " +
-        "For manual JSON fill: get_template → get_template_structure → generate_carousel (carousel_content) or generate_graphic (content_update).",
+        "For user-written copy: map their sentences onto these labels verbatim, SHOW the result, WAIT for yes, then generate_carousel (carousel_content) or generate_graphic (content_update). " +
+        "Do not call those fill tools in the same turn as this one.",
       inputSchema: {
         template_id: z.string().describe("The template ID to inspect"),
       },
@@ -1005,7 +1011,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       title: "Generate AI carousel",
       description:
-        "AI carousel maker: fill an EXISTING carousel template (user gave ID or name) with new topic/blog/YouTube/TikTok while KEEPING the layout. " +
+        "AI carousel maker: KEEP an existing carousel layout and let ContentDrips WRITE the slide copy from a topic, blog, YouTube, or TikTok URL. " +
+        "Do NOT use when the user already wrote the slide text — that rewrites their words. Use generate_carousel instead, after showing the text and getting a yes. " +
         "If they only gave a name, call get_template first. " +
         "Do NOT use when they gave no template/design — that is create_graphic + run_ai_design_agent. " +
         "REQUIRES template_id and profile_id from get_profiles. This starts a render job. " +
@@ -1045,7 +1052,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       title: "Generate AI graphic",
       description:
-        "AI graphic maker: fill an EXISTING graphic/quote/infographic template (user gave ID or name) with new topic/blog/YouTube/TikTok while KEEPING the layout. " +
+        "AI graphic maker: KEEP an existing graphic/quote/infographic layout and let ContentDrips WRITE the copy from a topic, blog, YouTube, or TikTok URL. " +
+        "Do NOT use when the user already wrote the graphic text — that rewrites their words. Use generate_graphic instead, after showing the text and getting a yes. " +
         "If they only gave a name, call get_template first. " +
         "Do NOT use when they gave no template/design — that is create_graphic + run_ai_design_agent. " +
         "REQUIRES template_id and profile_id from get_profiles. This starts a render job. " +
@@ -1085,17 +1093,18 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       title: "Fill carousel from JSON",
       description:
-        "Fill an EXISTING carousel template with manual/LLM-written JSON (carousel_content). template_id is required. " +
-        "Use when the user (or you) wants full control over slide text/images based on get_template_structure — " +
-        "not the AI carousel maker (generate_ai_carousel) and not Design Agent. " +
-        "REQUIRED order: get_template → get_template_structure → build carousel_content matching field labels → this tool → check_job_status. " +
+        "Fill an EXISTING carousel with the user's own slide text (carousel_content). template_id is required. " +
+        "Use when the user already wrote each slide. Copy every value character-for-character — do not shorten, headline, or rephrase. " +
+        "Do NOT use generate_ai_carousel for this; that tool rewrites copy. Do NOT use Design Agent. " +
+        "REQUIRED order: get_template → get_template_structure → map their sentences onto labels → SHOW the text slide by slide in chat → WAIT until they say yes → this tool → check_job_status. " +
+        "Do not call this tool until they confirm. If they correct a line, show the update and ask again. Pass only the confirmed text. " +
         "carousel_content shape: { carousel_topic?, intro_slide?: { elements: { [label]: { type, value, via?, image_query? } } }, " +
         "slides: [{ elements: {...} }], ending_slide?: { elements: {...} } }. " +
         "Element types are typically 'text' or 'image'. For Unsplash images use via='unsplash' and image_query.",
       inputSchema: {
         template_id: z.string().describe("Required. Existing carousel template ID — do not invent or auto-pick."),
         carousel_content: carouselContentSchema().describe(
-          "Required. Carousel JSON matching template structure. Example: " +
+          "Required. The exact text the user confirmed, mapped onto template labels. Do not paraphrase. Example: " +
           "{ carousel_topic: 'Optional topic', " +
           "intro_slide: { elements: { heading: { type: 'text', value: 'Welcome' }, description: { type: 'text', value: '...' }, " +
           "image: { type: 'image', value: 'https://...' } } }, " +
@@ -1131,15 +1140,16 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       title: "Fill graphic from JSON",
       description:
-        "Fill an EXISTING graphic/quote template with a manual/LLM-written content_update array. template_id is required. " +
-        "Use when the user (or you) wants full control over field values based on get_template_structure — " +
-        "not the AI graphic maker (generate_ai_graphic) and not Design Agent. " +
-        "REQUIRED order: get_template → get_template_structure → build content_update using exact field labels → this tool → check_job_status. " +
+        "Fill an EXISTING graphic/quote with the user's own field text (content_update). template_id is required. " +
+        "Use when the user already wrote the graphic copy. Copy every value character-for-character — do not shorten, headline, or rephrase. " +
+        "Do NOT use generate_ai_graphic for this; that tool rewrites copy. Do NOT use Design Agent. " +
+        "REQUIRED order: get_template → get_template_structure → map their sentences onto labels → SHOW each label and value in chat → WAIT until they say yes → this tool → check_job_status. " +
+        "Do not call this tool until they confirm. If they correct a line, show the update and ask again. Pass only the confirmed text. " +
         "Each item: { type: 'textbox'|'image', label: '<field label from structure>', value: '...', fontSize?, fontColor?, textboxMaxHeight? }.",
       inputSchema: {
         template_id: z.string().describe("Required. Existing graphic/quote template ID — do not invent or auto-pick."),
         content_update: z.array(z.any()).describe(
-          "Required. Array of field updates matching get_template_structure labels. Example: " +
+          "Required. The exact text the user confirmed, using get_template_structure labels. Do not paraphrase. Example: " +
           "[{ type: 'textbox', label: 'headline', value: 'Flash Sale Alert!', fontSize: '56', fontColor: '#FF6B6B', textboxMaxHeight: 'auto' }, " +
           "{ type: 'textbox', label: 'subheadline', value: '50% OFF Everything', fontSize: '32', fontColor: '#4ECDC4', textboxMaxHeight: 150 }, " +
           "{ type: 'textbox', label: 'cta', value: 'SHOP NOW', fontSize: '36', fontColor: '#FFFFFF', textboxMaxHeight: 100 }]"

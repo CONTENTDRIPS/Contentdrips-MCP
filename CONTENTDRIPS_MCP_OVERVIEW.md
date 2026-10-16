@@ -33,14 +33,15 @@ ContentDrips MCP gives AI assistants the ability to:
 | Tool | Effect |
 |------|--------|
 | **AI Design Agent** | New AI layout. Default when the user did **not** name a template. On an existing template it **overrides/removes** the current design — use only if they explicitly ask to recreate. |
-| **AI carousel / graphic maker** | Needs a **template ID or name**. **Keeps** layout; fills topic / blog / YouTube / TikTok. |
-| **Manual JSON** (`generate_carousel` / `generate_graphic`) | Needs a **template ID**. LLM/user writes `carousel_content` or `content_update` from `get_template_structure`. |
+| **Exact copy** (`generate_carousel` / `generate_graphic`) | Needs a **template ID**. The user already wrote each slide or the graphic text. Copy `value`s verbatim. **Show that text and wait for a yes** before calling the tool. |
+| **AI carousel / graphic maker** | Needs a **template ID or name** plus a topic, blog, YouTube, or TikTok URL. **Keeps** layout. ContentDrips **writes** the copy. Do not use when the text is already written. |
 
-**Route by whether they named a template** (template = design = graphic = carousel = infographic):
+**Route by the copy** (template = design = graphic = carousel = infographic):
 
 1. **No ID or name:** AI Design Agent. `get_profiles` → `create_graphic(profile_id)` → `get_brand_styles` (if 2+ ASK which) → `run_ai_design_agent` (pass `reference_image` if they uploaded a picture) → **share the editor link and STOP**.
-2. **Has ID or name:** AI maker (keep layout). `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic` → `check_job_status`.
-3. **Override an existing design:** only if they explicitly ask to recreate the layout (or recreate from a reference image).
+2. **Has ID or name, and the user wrote the text:** `get_template` → `get_template_structure` → show the mapped text → wait for yes → `generate_carousel` / `generate_graphic`.
+3. **Has ID or name, and they gave a topic or URL:** `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic` → `check_job_status`.
+4. **Override an existing design:** only if they explicitly ask to recreate the layout (or recreate from a reference image).
 
 **Workspaces first:** always call `get_profiles` before create / generate / render / schedule / publish. If 2+ workspaces, ask which. Always pass `profile_id`.
 
@@ -55,19 +56,22 @@ ContentDrips MCP gives AI assistants the ability to:
 ### 1. Design from Scratch (AI Design Agent on blank)
 No template named → `get_profiles` → `create_graphic(profile_id)` → `get_brand_styles` (ask style if 2+; ask Pro if available) → `run_ai_design_agent` (pass `reference_image` if they uploaded a picture) → share editor link and stop. Export PNG/PDF only if they ask.
 
-### 2. Template ID + new topic/URL (AI maker — default)
-User named a template → `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic`. Use Design Agent on that template only if they explicitly ask to override/recreate the layout.
+### 2. Template ID + the user's own text (exact copy)
+User wrote each slide or the graphic copy → `get_template` → `get_template_structure` → show that text → wait for yes → `generate_carousel` / `generate_graphic`. Do not use the AI maker.
 
-### 3. Social post (LinkedIn or Instagram)
+### 3. Template ID + new topic/URL (AI maker)
+User named a template and gave a topic, blog, YouTube, or TikTok URL → `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic`. Use Design Agent on that template only if they explicitly ask to override/recreate the layout.
+
+### 4. Social post (LinkedIn or Instagram)
 Same MAIN FLOW. Publish **only** the platform they named.
 
-### 4. End-to-End Social Publishing Workflow
+### 5. End-to-End Social Publishing Workflow
 *"Generate a carousel from my blog post, create a LinkedIn post with the caption I'll give you, attach the carousel images, and schedule it for Monday 9am New York time."* All in a single conversation.
 
-### 5. Manage Your Content Calendar
+### 6. Manage Your Content Calendar
 *"Show me all my scheduled posts"* or *"Unschedule the post from last Tuesday"* — browse, reschedule, and manage your queue without opening the app.
 
-### 6. Quick Template Lookup
+### 7. Quick Template Lookup
 *"Get details of template 149900"* or *"Show me my FB Ad Creative v1 design"* — returns metadata and an **Open in editor** link. Template tools use markdown text (no inline image previews) so they work in any MCP client.
 
 ---
@@ -82,7 +86,7 @@ Same MAIN FLOW. Publish **only** the platform they named.
 | `search_templates` | Browse/search public templates when the user asks to show or pick one — not for silent auto-selection. |
 | `get_my_templates` | List your saved designs when you ask to show or pick one — not for silent auto-selection before creation. |
 | `get_template` | Look up a single design by ID or name. Returns markdown details and an editor link. |
-| `get_template_structure` | **Required** before AI maker or manual JSON fill. Inspect a template's editable field structure (labels, types). |
+| `get_template_structure` | **Required** before an exact fill, the AI maker, or `edit_template`. Inspect a template's editable field structure (labels, types). |
 | `create_graphic` | Create a new blank design. **First step** when creating without a template ID (then usually run AI Design Agent). Always pass `profile_id`. Choose type, format, slides, workspace. Custom sizes: 100–3000 px. |
 | `delete_graphic` | Permanently delete a design. Removes canvas JSON, thumbnail from S3, and all related records. Asks for confirmation. |
 
@@ -94,10 +98,10 @@ Same MAIN FLOW. Publish **only** the platform they named.
 |------|--------------|
 | `get_brand_styles` | List saved visual styles and whether Pro model is available. Call before Design Agent; ask if 2+ styles or Pro is available. |
 | `run_ai_design_agent` | New AI layout. Default when no template is named, or to **override** an existing design (only if they explicitly ask). Pass `style_id`, `model`, and `reference_image` if they uploaded a picture. Share `edit_url` and stop — do **not** auto-export. |
-| `generate_ai_carousel` | **AI carousel maker** — keep carousel layout, fill topic/blog/YouTube/TikTok. Preferred when user likes a carousel template. |
-| `generate_ai_graphic` | Same for graphic/quote templates. |
-| `generate_carousel` | Fill existing carousel with manual/LLM `carousel_content` JSON. `template_id` required. Call `get_template_structure` first. |
-| `generate_graphic` | Fill existing graphic with manual/LLM `content_update` array. `template_id` required. Call `get_template_structure` first. |
+| `generate_ai_carousel` | **AI carousel maker** — keep the layout and write copy from a topic, blog, YouTube, or TikTok URL. Do not use when the user already wrote the slides. |
+| `generate_ai_graphic` | Same for graphic/quote templates. Do not use when the user already wrote the graphic text. |
+| `generate_carousel` | Place the user's own slide text. Show it and wait for a yes, then pass `carousel_content`. `template_id` required. |
+| `generate_graphic` | Place the user's own graphic text. Show each field and wait for a yes, then pass `content_update`. `template_id` required. |
 | `render_template` | Export the **current** saved design as PNG/PDF by `template_id`. Use **only** when the user asks to preview, download, attach to a post, or publish — not automatically after Design Agent. |
 | `check_job_status` | Poll a render job. Returns `export_url(s)` — the final PNG/PDF download links — when complete. |
 
@@ -154,12 +158,25 @@ AI:  [get_profiles → create_graphic → get_brand_styles → run_ai_design_age
      (stops here — no auto-export)
 ```
 
-### Make a LinkedIn or Instagram post (named template → AI maker)
+### Make a LinkedIn or Instagram post (named template + topic → AI maker)
 ```
 You: "Make a LinkedIn post about why remote work is great, with a short caption. Use template 5821."
 AI:  [get_profiles → get_template → get_template_structure → generate_ai_graphic method=topic]
      [create_post + set_post_images]
      "Publish to LinkedIn only right now? Reply yes to confirm."
+```
+
+### Use the user's exact slide text
+```
+You: "Use template 5821. Slide 1 heading: Ship weekly. Slide 1 body: Small releases beat big launches. Slide 2 heading: Ask for the sale. Don't change my words."
+AI:  [get_template → get_template_structure]
+     "Here's the text I'll place:
+      Slide 1 — heading: Ship weekly
+      Slide 1 — body: Small releases beat big launches
+      Slide 2 — heading: Ask for the sale
+      Use this text exactly?"
+You: "Yes"
+AI:  [generate_carousel]
 ```
 
 ### New topic on a template you like (AI maker — keep layout)

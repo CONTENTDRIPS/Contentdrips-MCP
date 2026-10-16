@@ -33,7 +33,7 @@ The **AI Design Agent** is the default when you do not name a template. It build
 3. You can attach a picture as `reference_image` (“recreate this in my style”)
 4. You get an **Open in editor** link. Export PNG/PDF only if you ask to preview, download, or publish
 
-If you **do** name a template (or paste a template ID), the agent keeps that layout and fills new content (topic / blog / YouTube / TikTok). Design Agent on an existing design only runs if you explicitly ask to override or recreate it.
+If you **do** name a template (or paste a template ID), the agent keeps that layout. Your own slide or graphic text is placed as written, shown back to you, and filled only after you confirm. A topic, blog, YouTube, or TikTok URL is written by the AI maker. Design Agent on an existing design only runs if you explicitly ask to override or recreate it.
 
 ---
 
@@ -73,7 +73,7 @@ Show my scheduled posts. Create a new carousel from "3 mistakes new managers mak
 attach the slides to a LinkedIn post with a short caption, and ask me before publishing.
 ```
 
-**Manual JSON fill** (full control over fields — not the AI maker):
+**Manual JSON fill** (your own slide or graphic text — not the AI maker). The agent shows the mapped text and waits for a yes before filling:
 
 - Carousel payload: [`skills/contentdrips/examples/carousel_content.json`](skills/contentdrips/examples/carousel_content.json)
 - Graphic payload: [`skills/contentdrips/examples/content_update.json`](skills/contentdrips/examples/content_update.json)
@@ -186,8 +186,8 @@ Full client matrix (Claude Desktop, ChatGPT, and others): [`CONTENTDRIPS_MCP_OVE
 | Path | When | Result |
 |------|------|--------|
 | **AI Design Agent** | No template ID/name | New layout in your style → editor link (no auto-export) |
-| **AI carousel / graphic maker** | You named a template | **Keeps** layout; fills topic, blog, YouTube, or TikTok |
-| **Manual JSON** | You want every field | `carousel_content` or `content_update` after `get_template_structure` |
+| **Exact copy** (`generate_carousel` / `generate_graphic`) | You named a template and already wrote the slide or graphic text | Your words, copied as written. The agent shows them and waits for a yes before filling |
+| **AI carousel / graphic maker** | You named a template and gave a topic, blog, YouTube, or TikTok URL | **Keeps** layout; ContentDrips writes the copy |
 
 Always pass a workspace `profile_id`. Publish **only** to LinkedIn and/or Instagram if you named them — never both by default.
 
