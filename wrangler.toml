@@ -8,8 +8,9 @@ compatibility_flags = ["nodejs_compat"]
 tag = "v2"
 deleted_classes = ["ContentDripsMCP"]
 
-# Production URL: https://mcp.contentdrips.com/mcp/YOUR_API_KEY
-# Workers URL:    https://contentdrips-mcp.ukhalid639.workers.dev/mcp/YOUR_API_KEY
+# Production URL: https://mcp.contentdrips.com/mcp
+# Auth: Authorization: Bearer <API token> (no tokens in the URL)
+# Optional: wrangler secret put OAUTH_SIGNING_SECRET
 
 [vars]
 LARAVEL_API_URL = "https://api.contentdrips.com"

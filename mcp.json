@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "contentdrips": {
+      "url": "https://mcp.contentdrips.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${CONTENTDRIPS_API_KEY}"
+      }
+    }
+  }
+}

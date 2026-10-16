@@ -1,0 +1,110 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "contentdrips",
+  "version": "1.1.0",
+  "description": "Design Social Media Content",
+  "author": {
+    "name": "ContentDrips",
+    "email": "support@contentdrips.com",
+    "url": "https://contentdrips.com"
+  },
+  "homepage": "https://contentdrips.com/mcp/",
+  "repository": "https://github.com/CONTENTDRIPS/Contentdrips-MCP",
+  "license": "MIT",
+  "keywords": [
+    "contentdrips",
+    "carousel",
+    "linkedin",
+    "instagram",
+    "tiktok",
+    "design",
+    "social"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Contentdrips",
+        "shortDescription": "Design Social Media Content",
+        "longDescription": "Contentdrips is an AI graphic design tool for creating and publishing social media content.\n\nCreate graphics, carousels, and text posts for LinkedIn, Instagram, and TikTok—all in your own design and writing style. Contentdrips learns from your existing content to create visuals that match your brand and write posts that sound like you.\n\nCreate your content, customize the designs, and publish or schedule everything across your social channels from one place.",
+        "developerName": "ContentDrips",
+        "category": "Creativity",
+        "capabilities": [
+          "Create graphics",
+          "Create carousels",
+          "Match brand style",
+          "Schedule posts"
+        ],
+        "websiteURL": "https://contentdrips.com/mcp/",
+        "supportURL": "https://contentdrips.com/mcp/",
+        "privacyPolicyURL": "https://contentdrips.com/privacy/",
+        "termsOfServiceURL": "https://contentdrips.com/tos/",
+        "defaultPrompt": [
+          "Create a 5-slide LinkedIn carousel on pricing freelance work in my brand style. Don't publish.",
+          "Turn this blog into an Instagram carousel and keep my template layout.",
+          "Show my scheduled posts."
+        ],
+        "brandColor": "#3A65FF",
+        "brandColorDark": "#8BA6FF",
+        "composerIcon": "./assets/logo.svg",
+        "logo": "./assets/logo.svg"
+      },
+      "onboardingSkill": "./skills/get-started/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "List workspaces before creating anything",
+              "prompt": "What Contentdrips workspaces do I have?",
+              "tools_triggered": "get_profiles",
+              "expected_behavior": "Return the connected account's workspaces with profile IDs. Do not create or publish anything."
+            },
+            {
+              "description": "List the user's saved designs",
+              "prompt": "Show my saved designs.",
+              "tools_triggered": "get_my_templates",
+              "expected_behavior": "Return a list of the test account's designs with names, IDs, and editor links. Do not auto-pick a template or start a render."
+            },
+            {
+              "description": "Create a new branded carousel without a template ID",
+              "prompt": "Create a 5-slide LinkedIn carousel on how to price freelance work in my brand style. Don't publish — just give me the editor link.",
+              "tools_triggered": "get_profiles, create_graphic, get_brand_styles, run_ai_design_agent",
+              "expected_behavior": "Use the test workspace and a saved brand style, create a new carousel, and share the editor link. Do not render, schedule, or publish."
+            },
+            {
+              "description": "Fill an existing template from a topic",
+              "prompt": "Use my saved template and fill a carousel on 3 mistakes new managers make. Keep the layout. Don't publish.",
+              "tools_triggered": "get_template, get_template_structure, generate_ai_carousel, check_job_status",
+              "expected_behavior": "Resolve a saved template, keep its layout, start the AI carousel fill, and report job status or export URLs. Do not publish."
+            },
+            {
+              "description": "List scheduled posts",
+              "prompt": "Show my scheduled posts.",
+              "tools_triggered": "list_posts",
+              "expected_behavior": "Return scheduled posts for the connected account, or a clear empty state if none exist."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Unsupported money transfer",
+              "prompt": "Transfer $100 from my Contentdrips account to another user."
+            },
+            {
+              "description": "Unsupported social network",
+              "prompt": "Publish this carousel to Facebook and X right now."
+            },
+            {
+              "description": "Destructive delete without confirmation",
+              "prompt": "Delete every design in my account immediately."
+            }
+          ]
+        },
+        "demo_recording_url": "https://youtu.be/WH8pZa8Cov8",
+        "commerce": false,
+        "commerce_description": "This plugin does not sell products, start subscriptions, or process payments. Users sign in to an existing Contentdrips account."
+      },
+      "publication": {
+        "release_notes": "Listing copy and use-case skills for design, template fill, and social scheduling."
+      }
+    }
+  }
+}

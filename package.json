@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "vitest"
+    "test": "vitest run",
+    "validate:plugin": "node scripts/validate-plugin.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.6.0",

@@ -2,13 +2,23 @@ import { createContentDripsMcpHandler } from "./mcp";
 import {
   buildAuthorizeRedirect,
   buildDiscoveryResponse,
-  buildTokenResponse,
+  buildProtectedResourceMetadata,
+  buildWwwAuthenticate,
+  handleOAuthComplete,
+  handleTokenRequest,
+  isProtectedResourceMetadataPath,
+  rememberAuthorizeChallenge,
+  type OAuthEnv,
 } from "./auth";
 
-export interface Env {
+export interface Env extends OAuthEnv {
   LARAVEL_API_URL: string;
   RENDERER_API_URL: string;
   APP_URL: string;
+}
+
+function isMcpPath(pathname: string): boolean {
+  return pathname === "/mcp" || pathname === "/mcp/" || pathname === "/sse" || pathname === "/sse/";
 }
 
 export default {
@@ -50,14 +60,9 @@ export default {
       });
     }
 
-    // ── RFC 9728 Protected Resource Metadata ──────────────────────────────────
-    if (url.pathname === "/.well-known/oauth-protected-resource") {
-      return jsonResponse({
-        resource: baseUrl,
-        authorization_servers: [baseUrl],
-        bearer_methods_supported: ["header"],
-        scopes_supported: ["mcp"],
-      });
+    // ── RFC 9728 Protected Resource Metadata (root + /mcp path suffix) ─────────
+    if (isProtectedResourceMetadataPath(url.pathname)) {
+      return jsonResponse(buildProtectedResourceMetadata(baseUrl));
     }
 
     // ── RFC 8414 Authorization Server Metadata ────────────────────────────────
@@ -79,58 +84,38 @@ export default {
           client_id: clientId,
           client_id_issued_at: Math.floor(Date.now() / 1000),
           redirect_uris: body.redirect_uris || [],
-          grant_types: ["authorization_code"],
+          grant_types: ["authorization_code", "refresh_token"],
           response_types: ["code"],
           token_endpoint_auth_method: "none",
+          code_challenge_methods_supported: ["S256"],
         },
         201
       );
     }
 
-    // ── Authorization — GET (redirect to Vue consent page) ────────────────────
+    // ── Authorization — GET (store PKCE, redirect to Vue consent page) ────────
     if (url.pathname === "/authorize" && request.method === "GET") {
       const appUrl = env.APP_URL || "https://app.contentdrips.com";
-      return buildAuthorizeRedirect(appUrl, url.searchParams);
+      await rememberAuthorizeChallenge(env, url.searchParams);
+      return buildAuthorizeRedirect(appUrl, baseUrl, url.searchParams);
+    }
+
+    // ── Consent complete — Vue posts the API key, we issue a signed code ──────
+    if (url.pathname === "/oauth/complete" && (request.method === "GET" || request.method === "POST")) {
+      return handleOAuthComplete(request, env, baseUrl);
     }
 
     // ── Token exchange ────────────────────────────────────────────────────────
     if (url.pathname === "/token" && request.method === "POST") {
-      let code: string | null = null;
-      const contentType = request.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const body = (await request.json()) as { code?: string };
-        code = body.code || null;
-      } else {
-        const form = await request.formData();
-        code = form.get("code") as string | null;
-      }
-
-      if (!code) {
-        return jsonResponse({ error: "invalid_grant", error_description: "Missing code" }, 400);
-      }
-
-      // The code IS the ContentDrips API key (validated during /authorize step).
-      // No need to re-validate here — just return it as the access token.
-      return buildTokenResponse(code);
+      return handleTokenRequest(request, env, baseUrl);
     }
 
-    // ── MCP SSE endpoint ──────────────────────────────────────────────────────
-    if (url.pathname.startsWith("/mcp") || url.pathname.startsWith("/sse")) {
-      // Extract token from: 1) Authorization: Bearer header, 2) URL path, 3) ?token= param
+    // ── MCP endpoint (Bearer header only — no tokens in the URL) ──────────────
+    if (isMcpPath(url.pathname)) {
       let apiToken: string | null = null;
-
       const authHeader = request.headers.get("Authorization");
       if (authHeader?.startsWith("Bearer ")) {
         apiToken = authHeader.slice(7).trim();
-      }
-      if (!apiToken) {
-        const parts = url.pathname.split("/").filter(Boolean);
-        if (parts.length >= 2 && (parts[0] === "mcp" || parts[0] === "sse")) {
-          apiToken = parts[1];
-        }
-      }
-      if (!apiToken) {
-        apiToken = url.searchParams.get("token");
       }
 
       if (!apiToken) {
@@ -141,14 +126,12 @@ export default {
             headers: {
               "Content-Type": "application/json",
               "Access-Control-Allow-Origin": "*",
-              // This header tells Claude.ai where to find the OAuth flow
-              "WWW-Authenticate": `Bearer realm="ContentDrips MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+              "WWW-Authenticate": buildWwwAuthenticate(baseUrl),
             },
           }
         );
       }
 
-      // Stateless handler — token is a closure variable, no Durable Objects needed.
       const handler = createContentDripsMcpHandler(apiToken, env);
       return handler(request, env, ctx);
     }
@@ -156,8 +139,6 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 };
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {

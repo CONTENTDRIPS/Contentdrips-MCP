@@ -190,6 +190,17 @@ const DESTRUCTIVE_OPEN = {
   openWorldHint: true,
 } as const;
 
+type ToolHints =
+  | typeof READ_CLOSED
+  | typeof WRITE_CLOSED
+  | typeof WRITE_OPEN
+  | typeof DESTRUCTIVE_CLOSED
+  | typeof DESTRUCTIVE_OPEN;
+
+function annot(title: string, hints: ToolHints) {
+  return { title, ...hints };
+}
+
 const templateSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -280,6 +291,59 @@ const templateStructureOutput = {
   type: z.string().optional(),
   structure: z.any(),
 };
+
+/** Branding overlay. passthrough keeps extra fields the renderer accepts. */
+const brandingSchema = z
+  .object({
+    name: z.string().optional().describe("Brand or person name"),
+    bio: z.string().optional().describe("Short bio"),
+    handle: z.string().optional().describe("Social handle, for example @janedoe"),
+    website_url: z.string().optional().describe("Website URL"),
+    avatar_image_url: z.string().optional().describe("Avatar image URL"),
+  })
+  .passthrough();
+
+/** Solid canvas background for edit_template. */
+const canvasBackgroundSchema = z
+  .object({
+    type: z.string().describe("Background type. Use 'fill' for a solid color."),
+    color: z.string().optional().describe("Hex color, for example #0F172A"),
+  })
+  .passthrough();
+
+/** Fresh instances so JSON Schema inlines each object instead of using $ref. */
+function carouselElementSchema() {
+  return z
+    .object({
+      type: z.string().describe("Element type: 'text' or 'image'"),
+      value: z.string().optional().describe("Text content or image URL"),
+      via: z.string().optional().describe("Image source. Use 'unsplash' to search."),
+      image_query: z.string().optional().describe("Unsplash search query when via is 'unsplash'"),
+    })
+    .passthrough();
+}
+
+function carouselSlideSchema() {
+  return z
+    .object({
+      elements: z
+        .record(carouselElementSchema())
+        .optional()
+        .describe("Editable fields keyed by the template slot label"),
+    })
+    .passthrough();
+}
+
+function carouselContentSchema() {
+  return z
+    .object({
+      carousel_topic: z.string().optional().describe("Optional topic string"),
+      intro_slide: carouselSlideSchema().optional().describe("First slide"),
+      slides: z.array(carouselSlideSchema()).optional().describe("Middle slides"),
+      ending_slide: carouselSlideSchema().optional().describe("Last slide"),
+    })
+    .passthrough();
+}
 
 const profilesOutput = {
   default_profile_id: z.string().optional(),
@@ -466,13 +530,14 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_template_categories",
     {
+      title: "List template categories",
       description:
         "List available ContentDrips template categories (carousel, quote, LinkedIn, motivational, etc.). " +
         "Use when the user asks 'what template categories do you have', 'show me carousel templates', " +
         "'quote templates', or any category of designs. Then call search_templates with the matching category.",
       inputSchema: {},
       outputSchema: categoriesOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("List template categories", READ_CLOSED),
     },
     async () => {
       try {
@@ -492,6 +557,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "search_templates",
     {
+      title: "Search public templates",
       description:
         "Browse or search public ContentDrips templates (designs, graphics, creatives, carousels, quote cards). " +
         "Use ONLY when the user asks to show, find, browse, or pick a template — not as a silent step before creating content. " +
@@ -508,7 +574,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         type: z.string().optional().describe("Deprecated alias for category — prefer category instead"),
       },
       outputSchema: templateListOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("Search public templates", READ_CLOSED),
     },
     async ({ query, category, type }) => {
       try {
@@ -541,6 +607,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_my_templates",
     {
+      title: "List my designs",
       description:
         "Get the user's own saved templates/designs/graphics/carousels from their ContentDrips account. " +
         "Use ONLY when the user says 'show me my designs', 'my templates', 'list my creatives', or explicitly wants to pick one of their templates. " +
@@ -553,7 +620,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         profile_id: z.string().optional().describe("Optional profile/workspace ID to filter designs by a specific workspace"),
       },
       outputSchema: templateListOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("List my designs", READ_CLOSED),
     },
     async ({ type, profile_id }) => {
       try {
@@ -581,6 +648,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_template",
     {
+      title: "Get template details",
       description:
         "Look up a single template/design/graphic/carousel by ID or name. " +
         "REQUIRED before AI maker when the user named a design but you only have a name (or need to confirm ID). " +
@@ -590,7 +658,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         template_name: z.string().optional().describe("Template name or partial name (e.g. 'FB Ad Creative v1')"),
       },
       outputSchema: templateDetailOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("Get template details", READ_CLOSED),
     },
     async ({ template_id, template_name }) => {
       if (!template_id && !template_name) {
@@ -636,6 +704,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "create_graphic",
     {
+      title: "Create blank design",
       description:
         "Create a new blank design (graphic, carousel, quote) in the user's ContentDrips account. " +
         "Use when the user did NOT give an existing template/design ID or name. " +
@@ -662,7 +731,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         ),
       },
       outputSchema: templateDetailOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Create blank design", WRITE_CLOSED),
     },
     async ({ name, type, format, width, height, slides, profile_id }) => {
       try {
@@ -708,6 +777,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "delete_graphic",
     {
+      title: "Delete design",
       description:
         "Permanently delete a design/graphic/template from the user's ContentDrips account. " +
         "Removes the canvas JSON and thumbnail from S3 and cleans up all related records. " +
@@ -716,7 +786,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         template_id: z.string().describe("The ID of the design to delete"),
       },
       outputSchema: deleteGraphicOutput,
-      annotations: DESTRUCTIVE_CLOSED,
+      annotations: annot("Delete design", DESTRUCTIVE_CLOSED),
     },
     async ({ template_id }) => {
       try {
@@ -738,6 +808,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_brand_styles",
     {
+      title: "List brand styles",
       description:
         "REQUIRED before run_ai_design_agent. Lists the profile's saved visual styles and whether Pro model is available. " +
         "If 2+ styles: ASK which style to use (or none) — never auto-pick. " +
@@ -751,7 +822,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         ),
       },
       outputSchema: brandStylesOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("List brand styles", READ_CLOSED),
     },
     async ({ profile_id }) => {
       try {
@@ -816,6 +887,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "run_ai_design_agent",
     {
+      title: "Run AI Design Agent",
       description:
         "AI Design Agent — builds a NEW layout with AI. " +
         "Use when the user did NOT name an existing template/design (ID or name), or they uploaded a reference image to recreate in their style. " +
@@ -823,6 +895,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "If they DID name an existing template, use generate_ai_carousel/generate_ai_graphic instead unless they explicitly asked to override/recreate the layout. " +
         "REQUIRED: get_profiles then get_brand_styles. If 2+ styles, ASK which (or none) — never auto-pick. If Pro available, ASK Basic vs Pro. " +
         "If the user uploaded an image in ChatGPT, pass it as reference_image (https URL preferred, or data URI). " +
+        "Overwrites the canvas on that template_id (hard to undo). " +
+        "May fetch reference_image from an https URL the user supplies. " +
         "When finished: share edit_url and STOP. Do NOT render unless they ask to preview, download, or publish.",
       inputSchema: {
         template_id: z.string().describe(
@@ -849,7 +923,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         ),
       },
       outputSchema: designAgentOutput,
-      annotations: DESTRUCTIVE_CLOSED,
+      annotations: annot("Run AI Design Agent", DESTRUCTIVE_OPEN),
     },
     async ({ template_id, prompt, use_branding, style_id, model, reference_image }) => {
       try {
@@ -896,6 +970,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_template_structure",
     {
+      title: "Get template structure",
       description:
         "REQUIRED before generate_ai_carousel, generate_ai_graphic, generate_carousel, generate_graphic, or edit_template. " +
         "Inspects editable field labels/types and current fontSize/fontColor so you can build carousel_content, content_update, or surgical edit patches. " +
@@ -905,7 +980,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         template_id: z.string().describe("The template ID to inspect"),
       },
       outputSchema: templateStructureOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("Get template structure", READ_CLOSED),
     },
     async ({ template_id }) => {
       try {
@@ -928,6 +1003,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "generate_ai_carousel",
     {
+      title: "Generate AI carousel",
       description:
         "AI carousel maker: fill an EXISTING carousel template (user gave ID or name) with new topic/blog/YouTube/TikTok while KEEPING the layout. " +
         "If they only gave a name, call get_template first. " +
@@ -946,7 +1022,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         output: z.enum(["png", "pdf"]).default("png").describe("Output format (default: png)"),
       },
       outputSchema: jobQueuedOutput,
-      annotations: WRITE_OPEN,
+      annotations: annot("Generate AI carousel", WRITE_OPEN),
     },
     async ({ template_id, method, input, profile_id, output }) => {
       try {
@@ -967,6 +1043,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "generate_ai_graphic",
     {
+      title: "Generate AI graphic",
       description:
         "AI graphic maker: fill an EXISTING graphic/quote/infographic template (user gave ID or name) with new topic/blog/YouTube/TikTok while KEEPING the layout. " +
         "If they only gave a name, call get_template first. " +
@@ -985,7 +1062,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         output: z.enum(["png", "pdf"]).default("png").describe("Output format (default: png)"),
       },
       outputSchema: jobQueuedOutput,
-      annotations: WRITE_OPEN,
+      annotations: annot("Generate AI graphic", WRITE_OPEN),
     },
     async ({ template_id, method, input, profile_id, output }) => {
       try {
@@ -1006,6 +1083,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "generate_carousel",
     {
+      title: "Fill carousel from JSON",
       description:
         "Fill an EXISTING carousel template with manual/LLM-written JSON (carousel_content). template_id is required. " +
         "Use when the user (or you) wants full control over slide text/images based on get_template_structure — " +
@@ -1016,7 +1094,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "Element types are typically 'text' or 'image'. For Unsplash images use via='unsplash' and image_query.",
       inputSchema: {
         template_id: z.string().describe("Required. Existing carousel template ID — do not invent or auto-pick."),
-        carousel_content: z.any().describe(
+        carousel_content: carouselContentSchema().describe(
           "Required. Carousel JSON matching template structure. Example: " +
           "{ carousel_topic: 'Optional topic', " +
           "intro_slide: { elements: { heading: { type: 'text', value: 'Welcome' }, description: { type: 'text', value: '...' }, " +
@@ -1026,11 +1104,11 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           "ending_slide: { elements: { heading: { type: 'text', value: 'Thank You!' } } } }"
         ),
         profile_id: z.string().describe("REQUIRED. Workspace/profile ID from get_profiles. Same profile as the template."),
-        branding: z.any().optional().describe("Optional branding: { name, bio, handle, website_url, avatar_image_url }"),
+        branding: brandingSchema.optional().describe("Optional branding: { name, bio, handle, website_url, avatar_image_url }"),
         output: z.enum(["png", "pdf"]).default("png").describe("Output format"),
       },
       outputSchema: jobQueuedOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Fill carousel from JSON", WRITE_OPEN),
     },
     async ({ template_id, carousel_content, profile_id, branding, output }) => {
       try {
@@ -1051,6 +1129,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "generate_graphic",
     {
+      title: "Fill graphic from JSON",
       description:
         "Fill an EXISTING graphic/quote template with a manual/LLM-written content_update array. template_id is required. " +
         "Use when the user (or you) wants full control over field values based on get_template_structure — " +
@@ -1066,11 +1145,11 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           "{ type: 'textbox', label: 'cta', value: 'SHOP NOW', fontSize: '36', fontColor: '#FFFFFF', textboxMaxHeight: 100 }]"
         ),
         profile_id: z.string().describe("REQUIRED. Workspace/profile ID from get_profiles. Same profile as the template."),
-        branding: z.any().optional().describe("Optional branding: { name, bio, handle, website_url, avatar_image_url }"),
+        branding: brandingSchema.optional().describe("Optional branding: { name, bio, handle, website_url, avatar_image_url }"),
         output: z.enum(["png", "pdf"]).default("png").describe("Output format"),
       },
       outputSchema: jobQueuedOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Fill graphic from JSON", WRITE_OPEN),
     },
     async ({ template_id, content_update, profile_id, branding, output }) => {
       try {
@@ -1091,6 +1170,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "edit_template",
     {
+      title: "Edit and save template",
       description:
         "Surgically edit an EXISTING template/design/graphic/carousel and SAVE it. " +
         "Use for 'make headings a bit bigger', 'change this image URL', 'change text color to #…', or small text tweaks. " +
@@ -1110,16 +1190,16 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           "[{ type: 'image', label: 'background', value: 'https://example.com/new.jpg' }], " +
           "[{ type: 'textbox', label: 'heading', fontSize: '64', slide: 0 }]"
         ),
-        carousel_content: z.any().optional().describe(
+        carousel_content: carouselContentSchema().optional().describe(
           "Optional carousel patches (flattened and saved in place — does not add/remove slides). " +
           "Prefer content_update. Same shape as generate_carousel but only include fields you want to change."
         ),
-        canvas_background: z.any().optional().describe(
+        canvas_background: canvasBackgroundSchema.optional().describe(
           "Optional solid background: { type: 'fill', color: '#0F172A' }"
         ),
       },
       outputSchema: editTemplateOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Edit and save template", DESTRUCTIVE_CLOSED),
     },
     async ({ template_id, profile_id, content_update, carousel_content, canvas_background }) => {
       try {
@@ -1174,6 +1254,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "render_template",
     {
+      title: "Export PNG or PDF",
       description:
         "Export PNG/PDF of an already-saved design (render job → export_url). Does NOT rewrite content. " +
         "ONLY call this when the user asks to preview, download, export, attach images to a post, or publish/schedule. " +
@@ -1189,7 +1270,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         output: z.enum(["png", "pdf"]).default("png").describe("Output format (default: png)"),
       },
       outputSchema: jobQueuedOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Export PNG or PDF", WRITE_CLOSED),
     },
     async ({ template_id, profile_id, type, output }) => {
       try {
@@ -1210,6 +1291,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "check_job_status",
     {
+      title: "Check render job",
       description:
         "Poll a render job and get export_url(s) (PNG/PDF download links) when complete. " +
         "Use after render_template, generate_ai_carousel, generate_ai_graphic, generate_carousel, generate_graphic, or edit_template.",
@@ -1217,7 +1299,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         job_id: z.string().describe("Job ID returned from render_template or any generate tool"),
       },
       outputSchema: jobStatusOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("Check render job", READ_CLOSED),
     },
     async ({ job_id }) => {
       try {
@@ -1239,6 +1321,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_profiles",
     {
+      title: "List workspaces",
       description:
         "Get the user's ContentDrips workspaces (profiles). " +
         "REQUIRED before create_graphic, create_post, generate_ai_*, edit_template, render_template, schedule_post, or publish_post. " +
@@ -1248,7 +1331,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         _hint: z.string().optional().describe("Ignored — no input required. Pass nothing or omit entirely."),
       },
       outputSchema: profilesOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("List workspaces", READ_CLOSED),
     },
     async () => {
       try {
@@ -1280,12 +1363,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_social_accounts",
     {
+      title: "List social accounts",
       description: "Get connected LinkedIn and Instagram accounts for a profile. Check this before scheduling/publishing posts.",
       inputSchema: {
         profile_id: z.string().describe("Profile ID to check social accounts for"),
       },
       outputSchema: socialAccountsOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("List social accounts", READ_CLOSED),
     },
     async ({ profile_id }) => {
       try {
@@ -1336,13 +1420,14 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "list_posts",
     {
+      title: "List posts",
       description: "List your posts by status (draft, scheduled, published, or all)",
       inputSchema: {
         status: z.enum(["draft", "scheduled", "published", "publishing", "failed", ""]).optional()
           .describe("Filter by status. Leave empty for all posts."),
       },
       outputSchema: postsListOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("List posts", READ_CLOSED),
     },
     async ({ status }) => {
       try {
@@ -1387,12 +1472,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "get_post",
     {
+      title: "Get post details",
       description: "Get details of a specific post by UUID",
       inputSchema: {
         uuid: z.string().describe("The post UUID"),
       },
       outputSchema: postDetailOutput,
-      annotations: READ_CLOSED,
+      annotations: annot("Get post details", READ_CLOSED),
     },
     async ({ uuid }) => {
       try {
@@ -1427,6 +1513,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "create_post",
     {
+      title: "Create post",
       description:
         "Create a new draft post with a caption and optional images. " +
         "REQUIRED: call get_profiles first and ALWAYS pass profile_id — scheduling/publishing will fail without it. " +
@@ -1440,7 +1527,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         images_url: z.array(z.string()).optional().describe("Array of image URLs from export_urls"),
       },
       outputSchema: postDetailOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Create post", WRITE_CLOSED),
     },
     async ({ caption, profile_id, images_url }) => {
       try {
@@ -1472,6 +1559,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "update_post",
     {
+      title: "Update post",
       description:
         "Update a post's caption or platform flags. " +
         "Only set linkedin_publish/instagram_publish true for platforms the user explicitly requested. " +
@@ -1483,7 +1571,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         instagram_publish: z.boolean().optional().describe("Enable Instagram only if the user asked for Instagram"),
       },
       outputSchema: postDetailOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Update post", DESTRUCTIVE_CLOSED),
     },
     async ({ uuid, caption, linkedin_publish, instagram_publish }) => {
       try {
@@ -1514,12 +1602,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "delete_post",
     {
+      title: "Delete post",
       description: "Delete a post",
       inputSchema: {
         uuid: z.string().describe("The post UUID to delete"),
       },
       outputSchema: deletePostOutput,
-      annotations: DESTRUCTIVE_CLOSED,
+      annotations: annot("Delete post", DESTRUCTIVE_CLOSED),
     },
     async ({ uuid }) => {
       try {
@@ -1541,6 +1630,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "set_post_images",
     {
+      title: "Set post images",
       description:
         "CASE 1 — Attach ContentDrips-generated images to a post. " +
         "Use this after render_template, generate_ai_carousel, generate_ai_graphic, generate_carousel, or generate_graphic + check_job_status. " +
@@ -1555,7 +1645,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         ),
       },
       outputSchema: postImagesOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Set post images", WRITE_CLOSED),
     },
     async ({ uuid, export_urls }) => {
       try {
@@ -1581,6 +1671,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "upload_images_to_post",
     {
+      title: "Upload images to post",
       description:
         "CASE 2 — Upload external images to ContentDrips S3 and attach them to a post. " +
         "Use this for ANY image not from ContentDrips: user-uploaded images in the chat, " +
@@ -1598,7 +1689,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         ),
       },
       outputSchema: postImagesOutput,
-      annotations: WRITE_OPEN,
+      annotations: annot("Upload images to post", WRITE_OPEN),
     },
     async ({ uuid, image_urls, images_base64 }) => {
       try {
@@ -1629,6 +1720,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "remove_images_from_post",
     {
+      title: "Remove post images",
       description:
         "Remove ALL images from a post. Each file is deleted from S3, then images_url and graphic_id are cleared. " +
         "Use this when the user wants to replace or discard the visuals on a post.",
@@ -1636,7 +1728,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         uuid: z.string().describe("The post UUID"),
       },
       outputSchema: postImagesOutput,
-      annotations: DESTRUCTIVE_CLOSED,
+      annotations: annot("Remove post images", DESTRUCTIVE_CLOSED),
     },
     async ({ uuid }) => {
       try {
@@ -1660,6 +1752,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "schedule_post",
     {
+      title: "Schedule post",
       description:
         "Schedule a post for future publishing. " +
         "ONLY enable platforms the user explicitly named. " +
@@ -1680,7 +1773,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         instagram_account_id: z.number().optional().describe("Specific Instagram account ID (uses default if not specified)"),
       },
       outputSchema: postDetailOutput,
-      annotations: WRITE_OPEN,
+      annotations: annot("Schedule post", WRITE_OPEN),
     },
     async ({ uuid, scheduled_time, timezone, linkedin_publish, instagram_publish, linkedin_account_id, instagram_account_id }) => {
       const li = linkedin_publish === true;
@@ -1736,12 +1829,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "unschedule_post",
     {
+      title: "Unschedule post",
       description: "Unschedule a post and move it back to drafts",
       inputSchema: {
         uuid: z.string().describe("The post UUID"),
       },
       outputSchema: postDetailOutput,
-      annotations: WRITE_CLOSED,
+      annotations: annot("Unschedule post", WRITE_CLOSED),
     },
     async ({ uuid }) => {
       try {
@@ -1759,6 +1853,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
   server.registerTool(
     "publish_post",
     {
+      title: "Publish post",
       description:
         "Publish a post immediately. ONLY enable platforms the user EXPLICITLY named — no LinkedIn bias. " +
         "Instagram-only request → instagram_publish=true, linkedin_publish=false. Never publish to an extra platform. " +
@@ -1777,7 +1872,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         instagram_account_id: z.number().optional().describe("Specific Instagram account ID (optional — uses default if omitted)"),
       },
       outputSchema: postDetailOutput,
-      annotations: DESTRUCTIVE_OPEN,
+      annotations: annot("Publish post", DESTRUCTIVE_OPEN),
     },
     async ({ uuid, confirmed, linkedin_publish, instagram_publish, linkedin_account_id, instagram_account_id }) => {
       if (!confirmed) {

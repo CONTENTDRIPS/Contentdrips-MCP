@@ -1,0 +1,34 @@
+{
+  "name": "contentdrips",
+  "version": "1.0.0",
+  "description": "Create branded social graphics and carousels, then draft, schedule, or publish to LinkedIn and Instagram from chat.",
+  "author": {
+    "name": "ContentDrips",
+    "email": "support@contentdrips.com"
+  },
+  "homepage": "https://contentdrips.com/mcp/",
+  "repository": "https://github.com/CONTENTDRIPS/Contentdrips-MCP",
+  "license": "MIT",
+  "keywords": [
+    "contentdrips",
+    "carousel",
+    "linkedin",
+    "instagram",
+    "design",
+    "mcp",
+    "social"
+  ],
+  "logo": "assets/logo.svg",
+  "skills": "./skills/",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "CONTENTDRIPS_API_KEY": {
+        "type": "string",
+        "title": "ContentDrips API token",
+        "description": "Bearer token from app.contentdrips.com → Settings → API Tokens. The plugin never stores this value in the repo."
+      }
+    },
+    "required": ["CONTENTDRIPS_API_KEY"]
+  }
+}

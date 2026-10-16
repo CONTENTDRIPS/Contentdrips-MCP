@@ -123,7 +123,7 @@ Copy `skills/contentdrips/` into that product’s skills directory (for example 
 
 ---
 
-## Connect MCP (API key in a header, not in the URL)
+## Connect MCP (API key in the Authorization header only)
 
 1. Log in at [app.contentdrips.com](https://app.contentdrips.com)
 2. **Settings → API Tokens** → create a token
@@ -144,7 +144,18 @@ claude mcp add --transport http contentdrips https://mcp.contentdrips.com/mcp \
 
 ### Cursor
 
-**Settings → MCP → Add MCP Server**
+**Marketplace plugin (recommended):** this repo is a Cursor Plugin (`.cursor-plugin/plugin.json` + `mcp.json`). After it is listed, install **contentdrips** from the Cursor Marketplace and set `CONTENTDRIPS_API_KEY` under Plugins → Configure.
+
+To try the plugin locally before publish:
+
+```bash
+mkdir -p ~/.cursor/plugins/local
+ln -sfn "$(pwd)" ~/.cursor/plugins/local/contentdrips
+```
+
+Then reload Cursor and set the API token in Plugins → Configure.
+
+**Manual MCP (without the plugin):** Settings → MCP → Add MCP Server
 
 - Type: HTTP
 - URL: `https://mcp.contentdrips.com/mcp`
@@ -214,8 +225,12 @@ npm run dev                      # http://localhost:8787
 ```
 
 ```bash
+npx wrangler secret put OAUTH_SIGNING_SECRET   # HMAC key for OAuth codes / refresh tokens
 npm run deploy
+npm run validate:plugin
 ```
+
+Marketplace and directory listing fields live in [`DIRECTORY.md`](DIRECTORY.md). Submit the public repo to Cursor at [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish) (this listing also covers Grok Bot).
 
 ---
 
@@ -224,6 +239,7 @@ npm run deploy
 - Product: [contentdrips.com](https://contentdrips.com) — social media carousel maker and graphic automation
 - App: [app.contentdrips.com](https://app.contentdrips.com)
 - Skill: [`skills/contentdrips/SKILL.md`](skills/contentdrips/SKILL.md)
+- Marketplace / directory listing pack: [`DIRECTORY.md`](DIRECTORY.md)
 - Marketing / setup overview: [`CONTENTDRIPS_MCP_OVERVIEW.md`](CONTENTDRIPS_MCP_OVERVIEW.md)
 - API: [developer.contentdrips.com](https://developer.contentdrips.com)
 - Support: support@contentdrips.com
