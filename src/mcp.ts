@@ -360,14 +360,14 @@ const socialAccountsOutput = {
   count: z.number(),
   linkedin_connected: z.boolean().optional(),
   instagram_connected: z.boolean().optional(),
-  connect_url: z.string().optional(),
+  connect_url: z.string().nullable().optional(),
   accounts: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
-      source: z.string().optional(),
-      handle: z.string().optional(),
-      account_type: z.string().optional(),
+      source: z.string().nullable().optional(),
+      handle: z.string().nullable().optional(),
+      account_type: z.string().nullable().optional(),
     })
   ),
 };
@@ -1411,9 +1411,9 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
             accounts: (result.accounts || []).map((acc: any) => ({
               id: String(acc.id),
               name: acc.name || "Untitled",
-              source: acc.source,
-              handle: acc.handle,
-              account_type: acc.account_type,
+              source: acc.source ?? undefined,
+              handle: acc.handle ?? undefined,
+              account_type: acc.account_type ?? undefined,
             })),
           },
         };
