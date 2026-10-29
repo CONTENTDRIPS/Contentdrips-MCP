@@ -374,13 +374,13 @@ const socialAccountsOutput = {
 
 const postSummarySchema = z.object({
   uuid: z.string(),
-  caption: z.string().optional(),
-  status: z.string().optional(),
-  scheduled_time: z.string().optional(),
-  image_count: z.number().optional(),
-  linkedin_publish: z.boolean().optional(),
-  instagram_publish: z.boolean().optional(),
-  post_url: z.string().optional(),
+  caption: z.string().nullish(),
+  status: z.string().nullish(),
+  scheduled_time: z.string().nullish(),
+  image_count: z.number().nullish(),
+  linkedin_publish: z.boolean().nullish(),
+  instagram_publish: z.boolean().nullish(),
+  post_url: z.string().nullish(),
 });
 
 const postsListOutput = {
@@ -390,18 +390,18 @@ const postsListOutput = {
 
 const postDetailOutput = {
   uuid: z.string().optional(),
-  status: z.string().optional(),
-  caption: z.string().optional(),
-  post_url: z.string().optional(),
-  image_count: z.number().optional(),
-  scheduled_time: z.string().optional(),
-  scheduled_time_utc: z.string().optional(),
-  error_log: z.string().optional(),
-  linkedin_publish: z.boolean().optional(),
-  instagram_publish: z.boolean().optional(),
-  profile_id: z.string().optional(),
-  message: z.string().optional(),
-  platforms: z.array(z.string()).optional(),
+  status: z.string().nullish(),
+  caption: z.string().nullish(),
+  post_url: z.string().nullish(),
+  image_count: z.number().nullish(),
+  scheduled_time: z.string().nullish(),
+  scheduled_time_utc: z.string().nullish(),
+  error_log: z.string().nullish(),
+  linkedin_publish: z.boolean().nullish(),
+  instagram_publish: z.boolean().nullish(),
+  profile_id: z.string().nullish(),
+  message: z.string().nullish(),
+  platforms: z.array(z.string()).nullish(),
 };
 
 const deleteGraphicOutput = {
@@ -427,6 +427,20 @@ const postImagesOutput = {
 function toNum(value: unknown): number | undefined {
   if (typeof value === "number" && !Number.isNaN(value)) return value;
   if (typeof value === "string" && value !== "" && !Number.isNaN(Number(value))) return Number(value);
+  return undefined;
+}
+
+/** Optional string. Drafts return null for scheduled_time, caption, and error_log. */
+function optStr(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  return String(value);
+}
+
+function optBool(value: unknown): boolean | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
   return undefined;
 }
 
@@ -1463,13 +1477,13 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
             count: result.count ?? posts.length,
             posts: posts.map((p: any) => ({
               uuid: String(p.uuid),
-              caption: p.caption,
-              status: p.status,
-              scheduled_time: p.scheduled_time,
+              caption: optStr(p.caption),
+              status: optStr(p.status),
+              scheduled_time: optStr(p.scheduled_time),
               image_count: toNum(p.image_count),
-              linkedin_publish: p.linkedin_publish,
-              instagram_publish: p.instagram_publish,
-              post_url: p.post_url,
+              linkedin_publish: optBool(p.linkedin_publish),
+              instagram_publish: optBool(p.instagram_publish),
+              post_url: optStr(p.post_url),
             })),
           },
         };
@@ -1504,14 +1518,14 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           content: [{ type: "text" as const, text }],
           structuredContent: {
             uuid: result.uuid != null ? String(result.uuid) : uuid,
-            status: result.status,
-            caption: result.caption,
-            post_url: result.post_url,
+            status: optStr(result.status),
+            caption: optStr(result.caption),
+            post_url: optStr(result.post_url),
             image_count: toNum(result.image_count),
-            scheduled_time: result.scheduled_time,
-            error_log: result.error_log,
-            linkedin_publish: result.linkedin_publish,
-            instagram_publish: result.instagram_publish,
+            scheduled_time: optStr(result.scheduled_time),
+            error_log: optStr(result.error_log),
+            linkedin_publish: optBool(result.linkedin_publish),
+            instagram_publish: optBool(result.instagram_publish),
           },
         };
       } catch (error: any) {

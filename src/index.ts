@@ -1,4 +1,5 @@
 import { createContentDripsMcpHandler } from "./mcp";
+import { LaravelClient } from "./lib/laravel-client";
 import {
   buildAuthorizeRedirect,
   buildDiscoveryResponse,
@@ -119,17 +120,17 @@ export default {
       }
 
       if (!apiToken) {
-        return new Response(
-          JSON.stringify({ error: "unauthorized", message: "Authentication required" }),
-          {
-            status: 401,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-              "WWW-Authenticate": buildWwwAuthenticate(baseUrl),
-            },
-          }
-        );
+        return unauthorizedMcpResponse(baseUrl);
+      }
+
+      try {
+        const laravel = new LaravelClient(env.LARAVEL_API_URL);
+        const auth = await laravel.pingAuth(apiToken);
+        if (auth.unauthorized) {
+          return unauthorizedMcpResponse(baseUrl, "invalid_token");
+        }
+      } catch {
+        // Laravel unreachable — let the handler surface the error on the tool call.
       }
 
       const handler = createContentDripsMcpHandler(apiToken, env);
@@ -145,4 +146,24 @@ function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
   });
+}
+
+function unauthorizedMcpResponse(baseUrl: string, error?: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: "unauthorized",
+      error_code: error || "unauthorized",
+      message: error === "invalid_token"
+        ? "API token is invalid or has been revoked. Reconnect the ContentDrips MCP connector."
+        : "Authentication required",
+    }),
+    {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "WWW-Authenticate": buildWwwAuthenticate(baseUrl, error),
+      },
+    }
+  );
 }

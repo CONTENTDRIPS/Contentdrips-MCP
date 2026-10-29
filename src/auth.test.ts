@@ -54,6 +54,12 @@ describe("OAuth metadata", () => {
       "resource_metadata=\"https://mcp.contentdrips.com/.well-known/oauth-protected-resource/mcp\""
     );
   });
+
+  it("includes RFC 6750 error=invalid_token when the API key was revoked", () => {
+    expect(buildWwwAuthenticate("https://mcp.contentdrips.com", "invalid_token")).toContain(
+      'error="invalid_token"'
+    );
+  });
 });
 
 describe("PKCE token exchange", () => {

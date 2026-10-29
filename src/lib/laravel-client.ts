@@ -23,10 +23,30 @@ export class LaravelClient {
 
     if (!response.ok) {
       const errorText = await response.text();
+      if (response.status === 401) {
+        throw new Error(
+          `Laravel API error (401): API token is invalid or has been revoked. Reconnect the ContentDrips MCP connector.`
+        );
+      }
       throw new Error(`Laravel API error (${response.status}): ${errorText}`);
     }
 
     return response.json();
+  }
+
+  /** Lightweight auth check used before handling an MCP request. */
+  async pingAuth(apiKey: string): Promise<{ unauthorized: boolean; status: number }> {
+    const response = await fetch(`${this.baseUrl}/api/mcp/me`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    return {
+      unauthorized: response.status === 401,
+      status: response.status,
+    };
   }
 
   // =========================================================================

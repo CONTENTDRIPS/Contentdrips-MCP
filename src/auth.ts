@@ -35,9 +35,16 @@ export function buildProtectedResourceMetadata(baseUrl: string) {
   };
 }
 
-export function buildWwwAuthenticate(baseUrl: string): string {
+export function buildWwwAuthenticate(baseUrl: string, error?: string): string {
   const origin = baseUrl.replace(/\/$/, "");
-  return `Bearer realm="ContentDrips MCP", resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`;
+  const parts = [
+    `Bearer realm="ContentDrips MCP"`,
+    `resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
+  ];
+  if (error) {
+    parts.push(`error="${error}"`);
+  }
+  return parts.join(", ");
 }
 
 export function isProtectedResourceMetadataPath(pathname: string): boolean {
