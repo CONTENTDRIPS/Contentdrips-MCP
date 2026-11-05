@@ -278,12 +278,16 @@ const brandStylesOutput = {
 };
 
 const designAgentOutput = {
+  status: z.enum(["complete", "needs_input"]).optional(),
   template_id: z.string().optional(),
   name: z.string().optional(),
   summary: z.string().optional(),
   edit_url: z.string().optional(),
   style_id: z.string().optional(),
   model: z.string().optional(),
+  message: z.string().optional(),
+  question: z.string().optional(),
+  options: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
 };
 
 const templateStructureOutput = {
@@ -481,7 +485,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       instructions: [
         // ChatGPT weights the first ~512 chars — keep hard rules here.
-        "CRITICAL: User wrote the slide or graphic text → generate_carousel or generate_graphic. Copy each value verbatim. SHOW that text and WAIT for yes before calling them. Never generate_ai_* for written copy. Topic, blog, YouTube, or TikTok (AI writes) on a named template → generate_ai_carousel or generate_ai_graphic. No template id/name → Design Agent: get_profiles → create_graphic(profile_id) → get_brand_styles (2+ ASK) → run_ai_design_agent, then edit_url only. ALWAYS pass profile_id.",
+        "CRITICAL: User wrote the slide or graphic text → generate_carousel or generate_graphic. Copy each value verbatim. SHOW that text and WAIT for yes before calling them. Never generate_ai_* for written copy. Topic, blog, YouTube, or TikTok (AI writes) on a named template → generate_ai_carousel or generate_ai_graphic. No template id/name → Design Agent: get_profiles → create_graphic(profile_id) → get_brand_styles (2+ ASK) → run_ai_design_agent, then edit_url only. Follow-ups on that design (bigger title, navy background, add an icon, redesign slide 2) → run_ai_design_agent again on the SAME template_id — never create_graphic again. ALWAYS pass profile_id.",
         "Editor: https://app.contentdrips.com/canvas?template={id}",
         "No inline image previews. Do not auto-render to 'show' the design. ChatGPT: if the user uploaded an image, pass it as reference_image on run_ai_design_agent.",
         "",
@@ -495,7 +499,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "## Which fill tool",
         "- generate_carousel / generate_graphic: user-supplied words, copied character-for-character. Carousel → generate_carousel. Single graphic → generate_graphic. SHOW the mapped text and WAIT for yes before calling.",
         "- generate_ai_carousel / generate_ai_graphic: AI writes the copy from a topic or URL. KEEPS layout. Do NOT use when the text is already written.",
-        "- run_ai_design_agent: NEW layout. Use when no existing template is named, or they want a reference image recreated in their style.",
+        "- run_ai_design_agent: NEW layout, or follow-up edits on a design this tool already made (same template_id). Use when no existing labeled template is named, they want a reference image recreated in their style, or they ask to change that Design Agent canvas.",
         "- edit_template: SURGICAL edit + SAVE. Font size, color, image URL, or a one-line tweak. Does NOT redesign and does NOT replace a full script.",
         "",
         "### STEP 0 — Workspace (required)",
@@ -504,6 +508,8 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "",
         "### No template ID/name — Design Agent",
         "get_profiles → create_graphic(profile_id) → get_brand_styles → if 2+ styles ASK which (or none); if 1 use it unless declined → run_ai_design_agent (pass reference_image if they uploaded one) → STOP and share edit_url.",
+        "Follow-ups on that same design: call run_ai_design_agent again with the SAME template_id and only the change. Pass conversation_history (prior user + assistant lines). Do not create a new graphic.",
+        "If status is needs_input: ASK the user the returned question/options, then call again with their answer as prompt plus conversation_history. Do not invent a topic, format, or slide count.",
         "Do NOT render. Preview/download later → render_template + check_job_status with the same profile_id.",
         "",
         "### Has template ID or name — exact copy OR AI copy",
@@ -528,6 +534,7 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
         "get_my_templates / search_templates only when they ask to show/find/pick. Never silent auto-pick.",
         "",
         "### Edit existing design (save)",
+        "A design just made with run_ai_design_agent (bigger title, navy background, add an icon, redesign slide N) → run_ai_design_agent on that same template_id. Leave edit_template for labeled-field tweaks on a named template, and generate_ai_* when they want new copy but the same template layout.",
         "Named template + 'make headings bigger' / change color / change image URL / tweak text → get_template_structure (has current fontSize/fontColor) → edit_template with content_update patches. value is optional for style-only. Relative size: a bit ≈ current * 1.15. Match heading/headline/title labels. Then share edit_url; do NOT auto-render.",
         "",
         "### Export PNG/PDF",
@@ -906,24 +913,26 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
     {
       title: "Run AI Design Agent",
       description:
-        "AI Design Agent — builds a NEW layout with AI. " +
-        "Use when the user did NOT name an existing template/design (ID or name), or they uploaded a reference image to recreate in their style. " +
-        "Call create_graphic first (with profile_id). " +
+        "AI Design Agent — builds a NEW layout or edits an existing Design Agent canvas. " +
+        "Use when the user did NOT name an existing labeled template/design (ID or name), they uploaded a reference image to recreate in their style, or they want a follow-up change on a design this tool already made. " +
+        "First design: call create_graphic (with profile_id) then this tool. Follow-ups: same template_id, do not create a new graphic. " +
         "If they DID name an existing template and already wrote the slide or graphic text, use generate_carousel or generate_graphic (show the text and wait for yes). " +
         "If they named a template and gave a topic or URL, use generate_ai_carousel or generate_ai_graphic. " +
         "Use this tool on a named template only when they explicitly asked to override/recreate the layout. " +
         "REQUIRED: get_profiles then get_brand_styles. If 2+ styles, ASK which (or none) — never auto-pick. If Pro available, ASK Basic vs Pro. " +
         "If the user uploaded an image in ChatGPT, pass it as reference_image (https URL preferred, or data URI). " +
-        "Overwrites the canvas on that template_id (hard to undo). " +
+        "If status is needs_input, ASK the returned question/options, then call again with their answer as prompt and conversation_history. Do not invent a topic or slide count. " +
+        "Pass conversation_history on follow-up calls (prior user + assistant lines). " +
         "May fetch reference_image from an https URL the user supplies. " +
         "When finished: share edit_url and STOP. Do NOT render unless they ask to preview, download, or publish.",
       inputSchema: {
         template_id: z.string().describe(
-          "The template ID to run the AI agent on. Create one first with create_graphic if needed."
+          "The template ID to run the AI agent on. Create one first with create_graphic if needed. Reuse this ID for follow-up edits."
         ),
         prompt: z.string().describe(
           "What to design or change. Be specific: topic, style, colors, content, tone. " +
-          "For edits: describe only what to change (e.g. 'change background to dark navy, keep all text')."
+          "For edits: describe only what to change (e.g. 'change background to dark navy, keep all text'). " +
+          "After needs_input, pass the user's chosen option here."
         ),
         use_branding: z.boolean().optional().describe(
           "Include the user's profile branding (name, handle, brand colors, fonts) in the design. Default false."
@@ -940,11 +949,17 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           "Use when they say 'recreate this', 'use this image as reference', or attach a picture. " +
           "The agent copies STRUCTURE from the image and applies the chosen saved style for look. Omit if no image."
         ),
+        conversation_history: z.array(z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string(),
+        })).optional().describe(
+          "Prior user and assistant messages in this design chat. Required after needs_input and on follow-up edits so the agent keeps context."
+        ),
       },
       outputSchema: designAgentOutput,
       annotations: annot("Run AI Design Agent", DESTRUCTIVE_OPEN),
     },
-    async ({ template_id, prompt, use_branding, style_id, model, reference_image }) => {
+    async ({ template_id, prompt, use_branding, style_id, model, reference_image, conversation_history }) => {
       try {
         const result = await laravel.runAIDesignAgent(template_id, apiToken, {
           prompt,
@@ -952,31 +967,53 @@ export function createContentDripsMcpHandler(apiToken: string, env: Env) {
           style_id,
           model,
           reference_image,
+          conversation_history,
         });
 
+        const status = result.status === "needs_input" ? "needs_input" : "complete";
         const extras = [];
         if (result.style_id) extras.push(`Style: \`${result.style_id}\``);
         extras.push(`Model: ${result.model || model || "basic"}`);
         if (reference_image) extras.push("Reference image: yes");
 
-        const text =
-          `AI design complete!\n\n` +
-          `**${result.name}** (ID: \`${result.template_id}\`)\n` +
-          `${result.summary}\n` +
-          extras.join("  |  ") + `\n\n` +
-          `**View & edit your design:** ${result.edit_url}\n\n` +
-          `Stop here unless the user asks to preview, download PNG/PDF, attach to a post, or publish. ` +
-          `Only then call \`render_template\` with this template_id and the same profile_id.`;
+        let text: string;
+        if (status === "needs_input") {
+          const options = Array.isArray(result.options) ? result.options : [];
+          const optionLines = options
+            .map((opt: any) => `- \`${opt.id}\` — ${opt.label}`)
+            .join("\n");
+          text =
+            `${result.question || result.message || "How should I continue?"}\n\n` +
+            (optionLines ? `${optionLines}\n\n` : "") +
+            `Ask the user this question. Then call run_ai_design_agent again with the same template_id, ` +
+            `their answer as prompt, and conversation_history (this prompt plus this question). ` +
+            `Do not invent a topic, format, or slide count.`;
+        } else {
+          text =
+            `AI design complete!\n\n` +
+            `**${result.name}** (ID: \`${result.template_id}\`)\n` +
+            `${result.message || result.summary}\n` +
+            extras.join("  |  ") + `\n\n` +
+            `**View & edit your design:** ${result.edit_url}\n\n` +
+            `Follow-up changes on this design (bigger title, navy background, add an icon, redesign a slide) ` +
+            `→ call run_ai_design_agent again with this template_id. Do not create a new graphic. ` +
+            `Stop here unless the user asks to preview, download PNG/PDF, attach to a post, or publish. ` +
+            `Only then call \`render_template\` with this template_id and the same profile_id.`;
+        }
 
         return {
           content: [{ type: "text" as const, text }],
           structuredContent: {
+            status,
             template_id: result.template_id != null ? String(result.template_id) : template_id,
             name: result.name,
             summary: result.summary,
+            message: result.message,
             edit_url: result.edit_url,
             style_id: result.style_id != null ? String(result.style_id) : undefined,
             model: result.model || model || "basic",
+            question: result.question,
+            options: Array.isArray(result.options) ? result.options : undefined,
           },
         };
       } catch (error: any) {
