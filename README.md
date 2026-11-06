@@ -185,7 +185,7 @@ Full client matrix (Claude Desktop, ChatGPT, and others): [`CONTENTDRIPS_MCP_OVE
 
 | Path | When | Result |
 |------|------|--------|
-| **AI Design Agent** | No template ID/name | New layout in your style → editor link (no auto-export) |
+| **AI Design Agent** | No template ID/name, or a visual edit on an existing design | New layout or canvas change (rounded, color, icon) → editor link (no auto-export) |
 | **Exact copy** (`generate_carousel` / `generate_graphic`) | You named a template and already wrote the slide or graphic text | Your words, copied as written. The agent shows them and waits for a yes before filling |
 | **AI carousel / graphic maker** | You named a template and gave a topic, blog, YouTube, or TikTok URL | **Keeps** layout; ContentDrips writes the copy |
 

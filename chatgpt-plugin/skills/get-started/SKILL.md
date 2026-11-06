@@ -26,7 +26,7 @@ Call `get_profiles` first. If there are two or more workspaces, ask which. Pass 
 | Named template + their own slide or graphic text | [fill-from-source](../fill-from-source/SKILL.md) — show the text and wait for yes, then `generate_carousel` or `generate_graphic` |
 | Named template + topic, blog, YouTube, or TikTok URL | [fill-from-source](../fill-from-source/SKILL.md) — `generate_ai_carousel` or `generate_ai_graphic` |
 | Caption, schedule, or publish | [publish-and-schedule](../publish-and-schedule/SKILL.md) |
-| Small tweak on a named design (font, color, image, text) | `get_template_structure` → `edit_template` → share `edit_url` |
+| Small tweak on a named design (rounded, font, color, image, restyle) | [create-design](../create-design/SKILL.md) — `run_ai_design_agent` on that `template_id` → share `edit_url` |
 
 Browse (`get_my_templates`, `search_templates`) only when they ask to show, find, or pick a design.
 

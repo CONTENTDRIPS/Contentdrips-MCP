@@ -32,7 +32,7 @@ ContentDrips MCP gives AI assistants the ability to:
 
 | Tool | Effect |
 |------|--------|
-| **AI Design Agent** | New AI layout. Default when the user did **not** name a template. On an existing template it **overrides/removes** the current design — use only if they explicitly ask to recreate. |
+| **AI Design Agent** | New AI layout (default when no template is named), or canvas edits on an existing design (rounded, colors, icons, restyle). Follow-ups use the same `template_id`. |
 | **Exact copy** (`generate_carousel` / `generate_graphic`) | Needs a **template ID**. The user already wrote each slide or the graphic text. Copy `value`s verbatim. **Show that text and wait for a yes** before calling the tool. |
 | **AI carousel / graphic maker** | Needs a **template ID or name** plus a topic, blog, YouTube, or TikTok URL. **Keeps** layout. ContentDrips **writes** the copy. Do not use when the text is already written. |
 
@@ -41,7 +41,8 @@ ContentDrips MCP gives AI assistants the ability to:
 1. **No ID or name:** AI Design Agent. `get_profiles` → `create_graphic(profile_id)` → `get_brand_styles` (if 2+ ASK which) → `run_ai_design_agent` (pass `reference_image` if they uploaded a picture) → **share the editor link and STOP**.
 2. **Has ID or name, and the user wrote the text:** `get_template` → `get_template_structure` → show the mapped text → wait for yes → `generate_carousel` / `generate_graphic`.
 3. **Has ID or name, and they gave a topic or URL:** `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic` → `check_job_status`.
-4. **Override an existing design:** only if they explicitly ask to recreate the layout (or recreate from a reference image).
+4. **Canvas/visual tweak on a named design** (rounded, bigger title, color, icon, restyle): `run_ai_design_agent` on that `template_id`. Do not create a new graphic.
+5. **Override/recreate an existing design:** only if they explicitly ask (or recreate from a reference image).
 
 **Workspaces first:** always call `get_profiles` before create / generate / render / schedule / publish. If 2+ workspaces, ask which. Always pass `profile_id`.
 
@@ -60,7 +61,7 @@ No template named → `get_profiles` → `create_graphic(profile_id)` → `get_b
 User wrote each slide or the graphic copy → `get_template` → `get_template_structure` → show that text → wait for yes → `generate_carousel` / `generate_graphic`. Do not use the AI maker.
 
 ### 3. Template ID + new topic/URL (AI maker)
-User named a template and gave a topic, blog, YouTube, or TikTok URL → `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic`. Use Design Agent on that template only if they explicitly ask to override/recreate the layout.
+User named a template and gave a topic, blog, YouTube, or TikTok URL → `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic`. Visual tweaks on that template use `run_ai_design_agent` (same `template_id`).
 
 ### 4. Social post (LinkedIn or Instagram)
 Same MAIN FLOW. Publish **only** the platform they named.
@@ -86,7 +87,7 @@ Same MAIN FLOW. Publish **only** the platform they named.
 | `search_templates` | Browse/search public templates when the user asks to show or pick one — not for silent auto-selection. |
 | `get_my_templates` | List your saved designs when you ask to show or pick one — not for silent auto-selection before creation. |
 | `get_template` | Look up a single design by ID or name. Returns markdown details and an editor link. |
-| `get_template_structure` | **Required** before an exact fill, the AI maker, or `edit_template`. Inspect a template's editable field structure (labels, types). |
+| `get_template_structure` | **Required** before an exact fill or the AI maker. Inspect a template's editable field structure (labels, types). |
 | `create_graphic` | Create a new blank design. **First step** when creating without a template ID (then usually run AI Design Agent). Always pass `profile_id`. Choose type, format, slides, workspace. Custom sizes: 100–3000 px. |
 | `delete_graphic` | Permanently delete a design. Removes canvas JSON, thumbnail from S3, and all related records. Asks for confirmation. |
 
@@ -97,7 +98,7 @@ Same MAIN FLOW. Publish **only** the platform they named.
 | Tool | What It Does |
 |------|--------------|
 | `get_brand_styles` | List saved visual styles and whether Pro model is available. Call before Design Agent; ask if 2+ styles or Pro is available. |
-| `run_ai_design_agent` | New AI layout. Default when no template is named, or to **override** an existing design (only if they explicitly ask). Pass `style_id`, `model`, and `reference_image` if they uploaded a picture. Share `edit_url` and stop — do **not** auto-export. |
+| `run_ai_design_agent` | New AI layout, or canvas edits on an existing design (rounded, colors, icons, restyle). Default when no template is named. Pass `style_id`, `model`, and `reference_image` if they uploaded a picture. Share `edit_url` and stop — do **not** auto-export. |
 | `generate_ai_carousel` | **AI carousel maker** — keep the layout and write copy from a topic, blog, YouTube, or TikTok URL. Do not use when the user already wrote the slides. |
 | `generate_ai_graphic` | Same for graphic/quote templates. Do not use when the user already wrote the graphic text. |
 | `generate_carousel` | Place the user's own slide text. Show it and wait for a yes, then pass `carousel_content`. `template_id` required. |

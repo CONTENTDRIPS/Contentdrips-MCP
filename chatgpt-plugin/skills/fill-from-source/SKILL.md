@@ -39,6 +39,6 @@ Do not call `generate_ai_*` when they already wrote the words. Those tools rewri
 
 Do not auto-publish. Do not switch to Design Agent unless they asked to recreate the layout.
 
-## Small edits (save in place)
+## Canvas edits (not this fill flow)
 
-Named template + "make headings bigger", change a color, image URL, or line of text → `edit_template` patches (not Design Agent). Share `edit_url`. Relative size: a bit bigger ≈ current `fontSize` × 1.15.
+Named template + "make it rounded", "make headings bigger", change a color, image, or restyle → `run_ai_design_agent` on that `template_id`. See [create-design](../create-design/SKILL.md). Share `edit_url`.

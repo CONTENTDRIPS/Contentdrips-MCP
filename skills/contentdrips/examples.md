@@ -51,25 +51,9 @@ Graphic `type` is `"textbox"`, `"image"`, or `"shape"` — not `"text"`.
 
 ---
 
-## Edit + save — `edit_template`
+## Canvas edits — `run_ai_design_agent`
 
-`get_template` → `get_template_structure` → `edit_template`. Patches **save** the canvas. `value` is optional for style-only changes.
-
-```json
-[
-  { "type": "textbox", "label": "headline", "fontSize": "56" },
-  { "type": "textbox", "label": "headline", "fontColor": "#1A1A1A" },
-  { "type": "image", "label": "background", "value": "https://example.com/new.jpg" }
-]
-```
-
-Carousel: omit `slide` to change every matching label, or set `slide` to `0` / `"intro"` / `"ending"`.
-
-```json
-[{ "type": "textbox", "label": "heading", "fontSize": "64", "slide": 0 }]
-```
-
-Relative size: "a bit bigger" ≈ current `fontSize` from structure × 1.15.
+Named template or an existing design: call `run_ai_design_agent` on that `template_id`. Put the change in `prompt` ("make it a bit rounded", "make headings bigger", "navy background"). Do not use `generate_*` for visual tweaks. Share `edit_url` and stop.
 
 ---
 

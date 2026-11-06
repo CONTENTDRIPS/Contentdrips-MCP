@@ -5,8 +5,8 @@ description: >-
   MAIN FLOW: user-written slide or graphic text on a named template uses
   generate_carousel or generate_graphic (show the text, wait for yes). A topic
   or URL uses generate_ai_carousel or generate_ai_graphic. No template uses
-  AI Design Agent. edit_template is for a font, color, or image tweak, then SAVE.
-  Always get_template_structure before a fill or edit_template.
+  AI Design Agent. Canvas edits on a named template (rounded, color, icon)
+  use run_ai_design_agent. Always get_template_structure before a fill.
   Platforms explicit. Use when creating designs, posts, or publishing to
   LinkedIn/Instagram.
 ---
@@ -78,18 +78,18 @@ Always share these links with the user after creating a design or post.
 
 ## Agent rules
 
-1. **Workspaces first (always)** — call `get_profiles` before `create_graphic`, `create_post`, `generate_*`, `edit_template`, `render_template`, schedule, or publish. If 2+ workspaces, ASK which. Always pass `profile_id`. Never tell the user you lack a profile_id — fetch it.
+1. **Workspaces first (always)** — call `get_profiles` before `create_graphic`, `create_post`, `generate_*`, `run_ai_design_agent`, `render_template`, schedule, or publish. If 2+ workspaces, ASK which. Always pass `profile_id`. Never tell the user you lack a profile_id — fetch it.
 2. **MAIN FLOW — route by whether they named a template** (template = design = graphic = carousel = infographic):
    - **No ID or name:** AI Design Agent. `get_profiles` → `create_graphic(profile_id)` → `get_brand_styles` (if 2+ ASK which) → `run_ai_design_agent` (pass `reference_image` if they uploaded a picture) → **share the editor link and STOP**.
    - **Has ID or name + the user already wrote the slide or graphic text:** exact fill. `get_template` → `get_template_structure` → map their sentences verbatim → **show that text and wait for yes** → `generate_carousel` (`carousel_content`) or `generate_graphic` (`content_update`) → `check_job_status`. Do **not** call `generate_ai_*`.
    - **Has ID or name + new topic/URL (AI writes the copy):** `get_template` → `get_template_structure` → `generate_ai_carousel` / `generate_ai_graphic` → `check_job_status`.
-   - **Has ID or name + style/image/color/text tweak** ("make headings bigger", "change this image", "this color"): `get_template` → `get_template_structure` → `edit_template` (SAVES). Do **not** use Design Agent.
-   - Use Design Agent on an existing template only if they explicitly ask to override/recreate the layout (or recreate from a reference image).
+   - **Has ID or name + canvas/visual tweak** ("make it rounded", "make headings bigger", "change this image", "this color", "add an icon"): `run_ai_design_agent` on that `template_id`. Do **not** create a new graphic. Pass `conversation_history` on follow-ups.
+   - Use Design Agent to override/recreate a named layout only if they explicitly ask (or recreate from a reference image).
 3. **Confirm before publish — platforms matter** — confirm **naming platforms** (e.g. "Publish to LinkedIn only?" / "Publish to Instagram only?"). Set explicit booleans for **only** platforms they named — never add LinkedIn when they asked for Instagram, or Instagram when they asked for LinkedIn.
 4. **Confirm before delete** — ask before `delete_graphic` or `delete_post`.
 5. **Design synonyms** — "designs", "graphics", "creatives", "templates", "infographics", and "carousels" all map to ContentDrips templates.
 6. **Platforms — LinkedIn and Instagram equally** — only schedule/publish to platforms the user explicitly named. LinkedIn-only → `linkedin_publish=true`, `instagram_publish=false`. Instagram-only → opposite. Ask if unclear.
-7. **Do not auto-export** — after Design Agent or `edit_template`, share `edit_url` only. Call `render_template` → `check_job_status` **only** if they ask to preview, download PNG/PDF, attach to a post, or publish. Never say export is unavailable.
+7. **Do not auto-export** — after Design Agent, share `edit_url` only. Call `render_template` → `check_job_status` **only** if they ask to preview, download PNG/PDF, attach to a post, or publish. Never say export is unavailable.
 8. **Style + model before Design Agent** — call `get_brand_styles` before every `run_ai_design_agent`. If 2+ saved styles, ASK which to use (or none) — never auto-pick. If exactly 1, use it unless they declined. If Pro is available (`can_use_pro_model`), ASK Basic vs Pro (default Basic). Pass `style_id` and `model`.
 9. **Reference images (ChatGPT)** — if the user uploads an image (“recreate this”, “use this as reference”), pass it to `run_ai_design_agent` as `reference_image` (https URL preferred, or data URI). Claude typically cannot pass chat images to MCP.
 10. **Post images — two paths only:**
@@ -102,7 +102,7 @@ Always share these links with the user after creating a design or post.
 
 ---
 
-## Tools (29)
+## Tools (28)
 
 ### Templates & designs
 
@@ -112,7 +112,7 @@ Always share these links with the user after creating a design or post.
 | `search_templates` | Browse/search public templates by `category` and/or `query` keyword |
 | `get_my_templates` | List user's designs when they ask to show/pick; never auto-pick for creation |
 | `get_template` | Look up one design by ID or name (markdown details + editor link) |
-| `get_template_structure` | **Required** before exact fill, AI maker, or `edit_template` (includes current fontSize/fontColor) |
+| `get_template_structure` | **Required** before exact fill or AI maker |
 | `create_graphic` | New blank design — first step when creating without a template ID |
 | `delete_graphic` | Permanently delete a design |
 
@@ -133,13 +133,12 @@ For `custom`, always pass `format: "custom"` plus both `width` and `height`. Car
 | Tool | Use when |
 |------|----------|
 | `get_brand_styles` | **Required** before `run_ai_design_agent` — list saved styles + Pro eligibility; ask if 2+ styles or Pro is available |
-| `run_ai_design_agent` | New blank layout, or **override** existing design (ask + warn first). Pass `style_id` and `model`. |
+| `run_ai_design_agent` | New blank layout, canvas edits on a named template (rounded, color, icon, restyle), or follow-ups on the same `template_id`. Pass `style_id` and `model`. |
 | `generate_ai_carousel` | Template ID + topic/URL — AI writes the carousel copy. Not for text the user already wrote |
 | `generate_ai_graphic` | Template ID + topic/URL — AI writes the graphic copy. Not for text the user already wrote |
 | `generate_carousel` | User wrote each slide. Show the text, wait for yes, then `carousel_content` |
 | `generate_graphic` | User wrote the graphic copy. Show each field, wait for yes, then `content_update` |
-| `edit_template` | Surgical edit + **save**: fontSize, fontColor, image URL, text. `value` optional for style-only. After `get_template_structure` |
-| `render_template` | Export current design as PNG/PDF by `template_id` (after Design Agent, edit_template, or any saved design) |
+| `render_template` | Export current design as PNG/PDF by `template_id` (after Design Agent or any saved design) |
 | `check_job_status` | Poll render job → get `export_url`(s) |
 
 ### Workspaces & social
@@ -198,6 +197,7 @@ No template yet?
 Has / chose a template ID?
   User already wrote the slide or graphic text → exact copy (below). Do not use the AI maker.
   Topic, blog, YouTube, or TikTok, or they asked the AI to write → AI maker.
+  Canvas/visual tweak (rounded, bigger title, color, icon) → Design Agent on that template_id.
   They explicitly asked to recreate the layout → Design Agent override.
 
 ── Path A (Design Agent — no template ID/name) ──
@@ -217,13 +217,9 @@ get_template → get_template_structure
 generate_ai_carousel OR generate_ai_graphic (method=topic|blog|youtube|tiktok_reel)
 check_job_status → export_url(s)
 
-── Path B Design Agent (only if they explicitly asked to override/recreate) ──
-get_brand_styles → run_ai_design_agent(template_id, style_id?, model, reference_image?) → share edit_url
-
-── Path C edit + save (named template, keep layout) ──
-get_template → get_template_structure
-edit_template(content_update patches; value optional for style-only)
-check_job_status → share edit_url (STOP)
+── Path B Design Agent (canvas edit, or they asked to override/recreate) ──
+get_brand_styles → run_ai_design_agent(template_id, style_id?, model, prompt=the change, conversation_history?) → share edit_url
+Do not create_graphic again. Pass conversation_history on follow-ups.
 ```
 
 ### C. Exact copy (`carousel_content` / `content_update`)
@@ -265,9 +261,9 @@ Ask: "Publish to LinkedIn only?" / "Publish to Instagram only?" — name platfor
 - "Use template 5821 + this YouTube" → structure → `generate_ai_carousel`
 - "Publish that post to LinkedIn only" → `linkedin_publish=true`, `instagram_publish=false`
 - "Publish that post to Instagram only" → `linkedin_publish=false`, `instagram_publish=true`
-- "Make the headings a bit bigger on template 5821" → structure → `edit_template` with fontSize ≈ current * 1.15
-- "Change the hero image on this design to https://…" → structure → `edit_template` image patch
-- "Make the headline text #1A1A1A" → structure → `edit_template` fontColor patch
+- "Make the headings a bit bigger on template 5821" → `run_ai_design_agent` on 5821
+- "Change the hero image on this design to https://…" → `run_ai_design_agent` on that template_id
+- "Make template 342 a bit rounded" → `run_ai_design_agent` on 342
 - "Show me my designs" / "Show me carousel templates"
 - "Get details of template 149900"
 

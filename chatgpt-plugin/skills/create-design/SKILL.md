@@ -1,16 +1,19 @@
 ---
 name: create-design
 description: >-
-  Design a new Contentdrips graphic or carousel in the user's brand style
-  when they did not name a template. Use for quote cards, ads, infographics,
-  LinkedIn/Instagram/TikTok-sized posts, or "recreate this" from an uploaded image.
+  Design a new Contentdrips graphic or carousel in the user's brand style,
+  or edit an existing canvas (rounded, color, icon, restyle). Use for quote
+  cards, ads, infographics, LinkedIn/Instagram/TikTok-sized posts, or
+  "recreate this" from an uploaded image.
 ---
 
 # Create a design
 
-Use this when there is **no** template ID or name. Contentdrips builds a new layout and applies a saved brand style.
+Use this when there is **no** template ID or name (new layout), or when they want a **canvas/visual edit** on a named template.
 
 ## Steps
+
+For a **canvas edit** on a named template, skip step 2 — reuse that `template_id`.
 
 1. `get_profiles` — ask which workspace if there are two or more. Pass `profile_id`.
 2. `create_graphic` — set `type` (`carousel`, `graphic`, `quote`) and `format`:
@@ -24,4 +27,4 @@ Use this when there is **no** template ID or name. Contentdrips builds a new lay
 4. `run_ai_design_agent` — if they uploaded a reference image, pass `reference_image` (https URL or data URI).
 5. Share `edit_url` and **stop**. Do not call `render_template` unless they ask to preview, download, attach, or publish.
 
-Use Design Agent on an **existing** template only if they explicitly ask to override or recreate that canvas.
+On an **existing** template: reuse that `template_id` with `run_ai_design_agent` for canvas edits (rounded, bigger title, color, icon, restyle) or to override/recreate the layout. Do not call `create_graphic` again. Pass `conversation_history` on follow-ups.
